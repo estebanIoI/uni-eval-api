@@ -48,13 +48,17 @@ function createValidation(modelName, customRules = {}, options = {}) {
     return {
       validators: {},
       middlewares: {},
-      schemas: {}
+      schemas: {},
+      booleanFields: []
     };
   }
 
   try {
     // Cargar schema base
     const baseSchema = schemaLoader.load(modelName);
+    const booleanFields = Object.entries(baseSchema.properties || {})
+      .filter(([_, def]) => def && def.type === 'boolean')
+      .map(([name]) => name);
     const factory = new SchemaFactory(baseSchema);
 
     // Generar schemas por operación
@@ -82,6 +86,16 @@ function createValidation(modelName, customRules = {}, options = {}) {
       context
     });
 
+    const toggleValidator = booleanFields.length > 0
+      ? new EntityValidator({
+        paramsSchema: SchemaFactory.forParams({
+          id: { type: 'integer', minimum: 1 },
+          field: { type: 'string', enum: booleanFields }
+        }),
+        context
+      })
+      : null;
+
     const bulkValidator = new EntityValidator({
       bodySchema: bulkCreateSchema,
       context
@@ -94,28 +108,32 @@ function createValidation(modelName, customRules = {}, options = {}) {
       delete: validateId(),
       getById: validateId(),
       getAll: validatePagination({ maxLimit: 100 }),
-      bulk: validate(bulkValidator)
+      bulk: validate(bulkValidator),
+      toggle: toggleValidator ? validate(toggleValidator) : null
     };
 
     return {
       validators: {
         create: createValidator,
         update: updateValidator,
-        bulk: bulkValidator
+        bulk: bulkValidator,
+        toggle: toggleValidator || undefined
       },
       middlewares,
       schemas: {
         create: createSchema,
         update: updateSchema,
         bulk: bulkCreateSchema
-      }
+      },
+      booleanFields
     };
   } catch (error) {
     console.warn(`⚠️  Error creando validación para '${modelName}': ${error.message}`);
     return {
       validators: {},
       middlewares: {},
-      schemas: {}
+      schemas: {},
+      booleanFields: []
     };
   }
 }
@@ -150,8 +168,9 @@ function createValidatedCrud(crudConfig, validationConfig = {}, routerConfig = {
   // Crear CRUD base
   // Primero construir la validación para poder inyectarla al router
   const validation = createValidation(name, rules, { excludeFields, context });
+  const booleanFields = validation.booleanFields || [];
 
-  const crud = createCrudModule(crudConfig, null, { ...routerConfig, validation });
+  const crud = createCrudModule(crudConfig, null, { ...routerConfig, validation, booleanFields });
 
   // Adjuntar validación también al objeto retornado para fácil acceso
 
@@ -241,6 +260,15 @@ function applyValidationToRouter(router, middlewares, options = {}) {
           handle: middlewares.getAll,
           name: 'validationMiddleware',
           method: 'get'
+        });
+      }
+    } else if (path === '/:id/toggle/:field' && methods.includes('patch') && shouldApply('toggle')) {
+      // PATCH /:id/toggle/:field -> toggleBoolean
+      if (middlewares.toggle) {
+        layer.route.stack.unshift({
+          handle: middlewares.toggle,
+          name: 'validationMiddleware',
+          method: 'patch'
         });
       }
     }

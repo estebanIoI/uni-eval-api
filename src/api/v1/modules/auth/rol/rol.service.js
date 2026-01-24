@@ -12,13 +12,13 @@ class RolService {
 		const locals = localRoles.map(({ id, nombre }) => ({
 			id,
 			nombre,
-			tipo_participacion: 'LOCAL'
+			tipo_participacion: 'APP'
 		}));
 
 		const remotes = remoteRoles.map(({ user_idrole, role_name }) => ({
 			id: user_idrole,
 			nombre: role_name,
-			tipo_participacion: 'REMOTO'
+			tipo_participacion: 'AUTH'
 		}));
 
 		return [...locals, ...remotes];

@@ -6,7 +6,7 @@ const { tipo, catT, cfgT, catTmap, cfg_t_rol } = require('./app/t-a-e/tipo.crud'
 const cfgTCustom = require('./app/cfg-t/cfg-t.router');
 router.use('/tipo', tipo.router);
 router.use('/cat/t', catTmap.router, catT.router);
-router.use('/cfg/t', cfgT.router, cfgTCustom);
+router.use('/cfg/t', cfgTCustom, cfgT.router);
 router.use('/cfg/t/rol', cfg_t_rol.router);
 
 // Aspecto

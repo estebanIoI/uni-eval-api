@@ -72,6 +72,19 @@ class BaseController {
       next(err);
     }
   };
+
+  toggleBoolean = async (req, res, next) => {
+    try {
+      const { id, field } = req.params;
+      const data = await this.service.toggleBoolean(Number(id), field);
+      return successResponse(res, {
+        message: MESSAGES.GENERAL.SUCCESS.UPDATED,
+        data
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
 }
 
 module.exports = BaseController;

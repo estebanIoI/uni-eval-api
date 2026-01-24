@@ -164,6 +164,11 @@ class PrismaSchemaParser {
 
     let property = { ...baseType };
 
+    // Si es DateTime con @db.Date, usar formato 'date' en lugar de 'date-time'
+    if (field.type === 'DateTime' && field.attributes.includes('@db.Date')) {
+      property = { type: 'string', format: 'date' };
+    }
+
     // Si es array
     if (field.isArray) {
       property = {

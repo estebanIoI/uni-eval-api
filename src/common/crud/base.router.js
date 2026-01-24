@@ -1,34 +1,34 @@
 const { Router } = require('express');
 const { globalRoles: defaultRoles, globalMiddlewares: defaultMiddlewares } = require('@middlewares/auth.rol.global');
-const { requireAppRoles, requireAuthRoles } = require('@middlewares/auth.middleware');
+const { requireRoles } = require('@middlewares/auth.middleware');
 
-function buildRoleMiddlewares(globalRoles = [], routeRoleConfig = undefined) {
+function buildRoleMiddlewares(routeRoleConfig = undefined) {
   // routeRoleConfig puede ser:
-  // - undefined/null/[]: usa globalRoles y requireAppRoles
-  // - array: usa requireAppRoles
-  // - { type: 'app'|'auth', values: [...] }
+  // - undefined/null: solo aplica middleware de autenticación (rol global verifica automáticamente)
+  // - { type: 'app'|'auth', values: [...] }: configuración simple
+  // - [{ type: 'app'|'auth', values: [...] }, ...]: configuración múltiple
+  
   if (!routeRoleConfig) {
-    if (!Array.isArray(globalRoles) || !globalRoles.length) return [];
-    return requireAppRoles(globalRoles);
+    // Sin configuración explícita: por defecto exige rol global (app) definido en auth.rol.global
+    return requireRoles({ type: 'app', values: defaultRoles });
   }
-  if (Array.isArray(routeRoleConfig)) {
-    const roles = [
-      ...(Array.isArray(globalRoles) ? globalRoles : []),
-      ...routeRoleConfig
-    ].filter(Boolean);
-    if (!roles.length) return [];
-    return requireAppRoles(roles);
-  }
-  if (typeof routeRoleConfig === 'object' && routeRoleConfig.type && Array.isArray(routeRoleConfig.values)) {
-    const roles = [
-      ...(Array.isArray(globalRoles) ? globalRoles : []),
-      ...routeRoleConfig.values
-    ].filter(Boolean);
-    if (!roles.length) return [];
-    if (routeRoleConfig.type === 'auth') return requireAuthRoles(roles);
-    return requireAppRoles(roles);
-  }
-  return [];
+  
+  // Normalizar a array
+  const configs = Array.isArray(routeRoleConfig) ? routeRoleConfig : [routeRoleConfig];
+  
+  // Validar que todas las configuraciones sean válidas
+  const validConfigs = configs.filter(config => 
+    config && 
+    typeof config === 'object' && 
+    config.type && 
+    Array.isArray(config.values) && 
+    config.values.length > 0
+  );
+  
+  if (validConfigs.length === 0) return [];
+  
+  // Usar requireRoles que maneja roles globales automáticamente
+  return requireRoles(validConfigs);
 }
 
 function baseRouter(controller, routeName = '', config = {}) {
@@ -39,6 +39,7 @@ function baseRouter(controller, routeName = '', config = {}) {
     roles = {},
     disable = [],
     validation = null,
+    booleanFields = [],
   } = config;
 
   if (Array.isArray(globalMiddlewares) && globalMiddlewares.length) {
@@ -55,7 +56,7 @@ function baseRouter(controller, routeName = '', config = {}) {
   const isEnabled = key => !disableSet.has(key.toLowerCase());
 
   const v = validation && validation.middlewares ? validation.middlewares : {};
-  const getRoles = (opName) => buildRoleMiddlewares(globalRoles, roles[opName]);
+  const getRoles = (opName) => buildRoleMiddlewares(roles[opName]);
 
   if (isEnabled('list')) router.get(
     '/',
@@ -86,6 +87,13 @@ function baseRouter(controller, routeName = '', config = {}) {
     ...(v.delete ? [v.delete] : []),
     ...getRoles('delete'),
     controller.delete
+  );
+
+  if (Array.isArray(booleanFields) && booleanFields.length && isEnabled('toggle')) router.patch(
+    '/:id/toggle/:field',
+    ...(v.toggle ? [v.toggle] : []),
+    ...getRoles('toggle'),
+    controller.toggleBoolean
   );
 
   router.routeName = routeName;

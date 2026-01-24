@@ -36,6 +36,7 @@ temp/
 # Prisma auto-generated clients
 src/prisma/**/
 !src/prisma/client.js
+prisma/
 
 # Swagger auto-generated files
 scripts/swagger.generated.json

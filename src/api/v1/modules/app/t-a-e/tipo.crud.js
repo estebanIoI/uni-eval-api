@@ -1,26 +1,65 @@
 const { createCrudModule } = require('@common/crud/base');
 const { createRelationsModule } = require('@common/map/relations');
 
-const tipo = createCrudModule({
-  name: 'tipo',
-  route: '/tipo',
-  displayName: 'Tipo',
-  schemaName: 'Tipo',
-});
+const { createValidatedCrud } = require('@common/crud/base.validation');
 
-const catT = createCrudModule({
-  name: 'cat_t',
-  route: '/cat/t',
-  displayName: 'Categoría Tipo',
-  schemaName: 'CategoriaTipo',
-});
+const tipo = createValidatedCrud(
+  {
+    name: 'tipo',
+    route: '/tipo',
+    displayName: 'Tipo',
+    schemaName: 'Tipo',
+  },
+  {
+    rules: {
+      nombre: {
+        onlyLetters: { allowSpaces: true },
+        stringLength: { min: 3, max: 100 }
+      },
+      descripcion: {
+        stringLength: { min: 3, max: 500 }
+      }
+    }
+  }
+);
 
-const cfgT = createCrudModule({
-  name: 'cfg_t',
-  route: '/cfg/t',
-  displayName: 'Configuración Tipo',
-  schemaName: 'ConfiguracionTipo',
-});
+const catT = createValidatedCrud(
+  {
+    name: 'cat_t',
+    route: '/cat/t',
+    displayName: 'Categoría Tipo',
+    schemaName: 'CategoriaTipo',
+  },
+  {
+    rules: {
+      nombre: {
+        onlyLetters: { allowSpaces: true },
+        stringLength: { min: 3, max: 100 }
+      },
+      descripcion: {
+        stringLength: { min: 3, max: 500 }
+      }
+    }
+  }
+);
+
+const cfgT = createValidatedCrud(
+  {
+    name: 'cfg_t',
+    route: '/cfg/t',
+    displayName: 'Configuración Tipo',
+    schemaName: 'ConfiguracionTipo',
+    disable: ['list'],
+  },
+  {
+    rules: {
+      fecha_fin: {
+        // fecha_fin debe ser >= fecha_inicio
+        afterField: { field: 'fecha_inicio', orEqual: true }
+      }
+    }
+  }
+);
 
 const cfg_t_rol = createCrudModule({
   name: 'cfg_t_rol',

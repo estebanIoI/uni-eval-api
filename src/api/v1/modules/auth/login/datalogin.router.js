@@ -2,7 +2,7 @@ const { Router } = require('express');
 const DataloginRepository = require('./datalogin.repository');
 const DataloginService = require('./datalogin.service');
 const DataloginController = require('./datalogin.controller');
-const { ensureAuth } = require('@middlewares/auth.middleware');
+const { ensureAuth, requireGlobalRole } = require('@middlewares/auth.middleware');
 
 const repository = new DataloginRepository();
 const service = new DataloginService(repository);
@@ -10,10 +10,9 @@ const controller = new DataloginController(service);
 
 const router = Router();
 
-// Rutas de solo lectura
-router.get('/', controller.getAll);
-router.get('/id/:id', controller.getById); // Evitar conflicto con /username
-router.get('/username/:username', controller.getByUsername);
+router.get('/', ensureAuth, requireGlobalRole, controller.getAll);
+router.get('/id/:id', ensureAuth, requireGlobalRole, controller.getById); // Evitar conflicto con /username
+router.get('/username/:username', ensureAuth, requireGlobalRole, controller.getByUsername);
 
 // Auth
 router.post('/login', controller.login);

@@ -2,8 +2,9 @@ const AppError = require('@utils/AppError');
 const MESSAGES = require('@constants/messages');
 
 class BaseService {
-  constructor(repository) {
+  constructor(repository, options = {}) {
     this.repository = repository;
+    this.booleanFields = Array.isArray(options.booleanFields) ? options.booleanFields : [];
   }
 
   // Remueve campos reservados que no deben aceptarse por escritura
@@ -66,6 +67,19 @@ class BaseService {
   async delete(id) {
     await this.getById(id);
     return this.repository.delete(id);
+  }
+
+  async toggleBoolean(id, fieldName) {
+    const allowed = new Set(this.booleanFields);
+    if (!allowed.has(fieldName)) {
+      throw new AppError(MESSAGES.GENERAL.VALIDATION.INVALID_REQUEST, 400);
+    }
+
+    const current = await this.getById(id);
+    const nextValue = !Boolean(current[fieldName]);
+    const updated = await this.repository.update(id, { [fieldName]: nextValue });
+
+    return updated;
   }
 }
 

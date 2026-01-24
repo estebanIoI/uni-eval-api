@@ -22,6 +22,16 @@ function buildCrudDocs(nameOrOptions, schema) {
     ? (nameOrOptions.displayName || Name)
     : Name;
 
+  let booleanFields = isOptions && Array.isArray(nameOrOptions.booleanFields)
+    ? nameOrOptions.booleanFields.filter(Boolean)
+    : [];
+
+  if (!booleanFields.length && schema && typeof schema === 'object') {
+    booleanFields = Object.entries(schema)
+      .filter(([_, def]) => def && typeof def === 'object' && def.type === 'boolean' && !def.readonly)
+      .map(([field]) => field);
+  }
+
   // -------------------------------
   // SCHEMAS DINÁMICOS
   // -------------------------------
@@ -243,6 +253,43 @@ function buildCrudDocs(nameOrOptions, schema) {
     };
   }
   if (Object.keys(idPathOps).length) paths[`${route}/{id}`] = idPathOps;
+
+  if (isEnabled('toggle') && booleanFields.length) {
+    paths[`${route}/{id}/toggle/{field}`] = {
+      patch: {
+        summary: `Alternar un campo booleano de ${displayName}`,
+        tags: [displayName],
+        parameters: [
+          {
+            in: 'path',
+            name: 'id',
+            required: true,
+            schema: { type: 'integer' },
+            description: 'Identificador del recurso'
+          },
+          {
+            in: 'path',
+            name: 'field',
+            required: true,
+            schema: { type: 'string', enum: booleanFields },
+            description: 'Nombre del campo booleano a alternar'
+          }
+        ],
+        responses: {
+          200: {
+            description: `${displayName} actualizado`,
+            content: {
+              'application/json': {
+                schema: { $ref: `#/components/schemas/${Name}` }
+              }
+            }
+          },
+          400: { description: 'Campo no permitido para toggle' },
+          404: { description: 'No encontrado' }
+        }
+      }
+    };
+  }
 
   // Permitir inyectar rutas/operaciones personalizadas desde options
   const extraPaths = isOptions ? nameOrOptions.extraPaths : undefined;

@@ -21,22 +21,28 @@ const aspecto = createValidatedCrud(
         stringLength: { min: 10, max: 500 }
       }
     }
-  },
-  {
-    roles: {
-      list: { type: 'auth', values: [1] },      // requireAppRoles
-      get:  { type: 'app', values: [10] },    // requireAuthRoles
-      create: { type: 'auth', values: [20] },
-    }
   }
 );
 
-const catA = createCrudModule({
-  name: 'cat_a',
-  route: '/cat/a',
-  displayName: 'Categoría Aspecto',
-  schemaName: 'CategoriaAspecto',
-});
+const catA = createValidatedCrud(
+  {
+    name: 'cat_a',
+    route: '/cat/a',
+    displayName: 'Categoría Aspecto',
+    schemaName: 'CategoriaAspecto',
+  },
+  {
+    rules: {
+      nombre: {
+        onlyLetters: { allowSpaces: true },
+        stringLength: { min: 3, max: 100 }
+      },
+      descripcion: {
+        stringLength: { min: 10, max: 500 }
+      }
+    }
+  }
+);
 
 const cfgA = createCrudModule({
   name: 'cfg_a',

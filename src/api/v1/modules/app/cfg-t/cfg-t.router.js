@@ -1,19 +1,14 @@
 const { Router } = require('express');
 const controller = require('./cfg-t.controller');
-const { globalRoles, globalMiddlewares } = require('@middlewares/auth.rol.global');
-const { requireAppRoles } = require('@middlewares/auth.middleware');
+const { ensureAuth } = require('@middlewares/auth.middleware');
+const { requireAuthorization } = require('@middlewares/authorization.middleware');
 
 const router = Router();
 
-if (Array.isArray(globalMiddlewares) && globalMiddlewares.length) {
-	router.use(...globalMiddlewares);
-}
-
-const roleMiddlewares = Array.isArray(globalRoles) && globalRoles.length
-	? requireAppRoles(globalRoles)
-	: [];
+// GET /cfg/t -> listado de configuraciones según rol del usuario
+router.get('/r', ensureAuth, requireAuthorization(), controller.getCfgTList);
 
 // GET /cfg/t/:id/a-e -> aspectos y escalas relacionados via a_e
-router.get('/:id/a-e', ...roleMiddlewares, controller.getAspectosEscalas);
+router.get('/:id/a-e', ensureAuth, requireAuthorization(), controller.getAspectosEscalas);
 
 module.exports = router;

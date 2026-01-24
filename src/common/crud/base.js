@@ -5,6 +5,14 @@ const baseRouter = require('./base.router');
 const buildCrudDocs = require('./base.swagger');
 const { extractSchemaFromPrisma } = require('../extractSchemaPrisma');
 
+function extractBooleanFields(schema) {
+  if (!schema || typeof schema !== 'object') return [];
+  const entries = schema.properties ? Object.entries(schema.properties) : Object.entries(schema);
+  return entries
+    .filter(([_, def]) => def && typeof def === 'object' && def.type === 'boolean' && !def.readonly)
+    .map(([name]) => name);
+}
+
 // ----------------------------------------
 // createCrudModule
 // ----------------------------------------
@@ -13,14 +21,17 @@ function createCrudModule(options, manualSchema = null, routerConfig = {}) {
   if (typeof options !== 'object') {
     const legacyName = options;
     const finalSchema = manualSchema || extractSchemaFromPrisma(legacyName);
+    const booleanFields = Array.isArray(routerConfig.booleanFields)
+      ? routerConfig.booleanFields
+      : extractBooleanFields(finalSchema);
     const repo = new BaseRepository(legacyName);
-    const service = new BaseService(repo);
+    const service = new BaseService(repo, { booleanFields });
     const controller = new BaseController(service);
     const realRoute = `/${legacyName}`;
-    const router = baseRouter(controller, realRoute, routerConfig);
+    const router = baseRouter(controller, realRoute, { ...routerConfig, booleanFields });
     const disable = Array.isArray(routerConfig.disable) ? routerConfig.disable : [];
     const docs = buildCrudDocs(
-      { name: legacyName, route: realRoute, displayName: legacyName, schemaName: legacyName, disable },
+      { name: legacyName, route: realRoute, displayName: legacyName, schemaName: legacyName, disable, booleanFields },
       finalSchema
     );
     return { router, docs };
@@ -31,13 +42,16 @@ function createCrudModule(options, manualSchema = null, routerConfig = {}) {
 
   // Generar esquema automático si no se pasa manual
   const finalSchema = manualSchema || extractSchemaFromPrisma(name);
+  const booleanFields = Array.isArray(routerConfig.booleanFields)
+    ? routerConfig.booleanFields
+    : extractBooleanFields(finalSchema);
 
   const repo = new BaseRepository(name);
-  const service = new BaseService(repo);
+  const service = new BaseService(repo, { booleanFields });
   const controller = new BaseController(service);
 
   const realRoute = route || `/${name}`;
-  const router = baseRouter(controller, realRoute, routerConfig);
+  const router = baseRouter(controller, realRoute, { ...routerConfig, booleanFields });
 
   // Unir disables provenientes de options y routerConfig (si existen)
   const combinedDisable = [
@@ -46,7 +60,7 @@ function createCrudModule(options, manualSchema = null, routerConfig = {}) {
   ];
 
   const docs = buildCrudDocs(
-    { name, route: realRoute, displayName, schemaName, disable: combinedDisable, extraPaths, extraComponents, extraTags },
+    { name, route: realRoute, displayName, schemaName, disable: combinedDisable, extraPaths, extraComponents, extraTags, booleanFields },
     finalSchema
   );
 

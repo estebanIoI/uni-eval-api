@@ -5,6 +5,18 @@ const CfgTRepository = require('./cfg-t.repository');
 const service = new CfgTService(new CfgTRepository());
 
 class CfgTController {
+	getCfgTList = async (req, res, next) => {
+		try {
+			const data = await service.getCfgTList(req.user);
+			return successResponse(res, {
+				message: 'Listado de configuraciones obtenido correctamente',
+				data,
+			});
+		} catch (err) {
+			next(err);
+		}
+	};
+
 	getAspectosEscalas = async (req, res, next) => {
 		try {
 			const cfgTId = Number(req.params.id);

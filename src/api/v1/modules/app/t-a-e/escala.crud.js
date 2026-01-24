@@ -2,19 +2,51 @@ const { createCrudModule } = require('@common/crud/base');
 const { createRelationsModule } = require('@common/map/relations');
 const { paths: extraPaths, components: extraComponents, tags: extraTags } = require('@common/bulk-cfg/bulk.swagger');
 
-const escala = createCrudModule({
-  name: 'escala',
-  route: '/escala',
-  displayName: 'Escala',
-  schemaName: 'Escala',
-});
+const { createValidatedCrud } = require('@common/crud/base.validation');
 
-const catE = createCrudModule({
-  name: 'cat_e',
-  route: '/cat/e',
-  displayName: 'Categoría Escala',
-  schemaName: 'CategoriaEscala',
-});
+const escala = createValidatedCrud(
+  {
+    name: 'escala',
+    route: '/escala',
+    displayName: 'Escala',
+    schemaName: 'Escala',
+  },
+  {
+    rules: {
+      sigla: {
+        onlyLetters: { allowSpaces: false },
+        stringLength: { min: 1, max: 5 }
+      },
+      nombre: {
+        onlyLetters: { allowSpaces: true },
+        stringLength: { min: 3, max: 100 }
+      },
+      descripcion: {
+        stringLength: { min: 10, max: 500 }
+      }
+    }
+  }
+);
+
+const catE = createValidatedCrud(
+  {
+    name: 'cat_e',
+    route: '/cat/e',
+    displayName: 'Categoría Escala',
+    schemaName: 'CategoriaEscala',
+  },
+  {
+    rules: {
+      nombre: {
+        onlyLetters: { allowSpaces: true },
+        stringLength: { min: 3, max: 100 }
+      },
+      descripcion: {
+        stringLength: { min: 10, max: 500 }
+      }
+    }
+  }
+);
 
 const cfgE = createCrudModule({
   name: 'cfg_e',

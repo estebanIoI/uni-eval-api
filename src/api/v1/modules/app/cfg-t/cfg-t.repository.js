@@ -81,6 +81,70 @@ class CfgTRepository {
 
 		return result;
 	}
+
+	async findCfgTListByUserRoles(userAppRoleIds = [], userAuthRoleIds = []) {
+		// Obtener roles permitidos para cada cfg_t
+		const cfgTRoles = await prisma.cfg_t_rol.findMany({
+			include: {
+				cfg_t: {
+					include: {
+						ct_map: true,
+					},
+				},
+				rol_mix: true,
+			},
+		});
+
+		// Agrupar por cfg_t
+		const cfgTMap = new Map();
+		for (const cfgTRol of cfgTRoles) {
+			const cfgT = cfgTRol.cfg_t;
+			const cfgTId = cfgT.id;
+
+			if (!cfgTMap.has(cfgTId)) {
+				cfgTMap.set(cfgTId, {
+					id: cfgT.id,
+					tipo_evaluacion_id: cfgT.tipo_evaluacion_id,
+					tipo_evaluacion: cfgT.ct_map?.nombre || null,
+					fecha_inicio: cfgT.fecha_inicio,
+					fecha_fin: cfgT.fecha_fin,
+					es_cmt_gen: cfgT.es_cmt_gen,
+					es_cmt_gen_oblig: cfgT.es_cmt_gen_oblig,
+					es_activo: cfgT.es_activo,
+					fecha_creacion: cfgT.fecha_creacion,
+					fecha_actualizacion: cfgT.fecha_actualizacion,
+					rolesRequeridos: [],
+				});
+			}
+
+			// Agregar información de roles
+			if (cfgTRol.rol_mix) {
+				cfgTMap.get(cfgTId).rolesRequeridos.push({
+					rol_mix_id: cfgTRol.rol_mix.id,
+					rol_origen_id: cfgTRol.rol_mix.rol_origen_id,
+					origen: cfgTRol.rol_mix.origen,
+				});
+			}
+		}
+
+		// Filtrar cfg_t donde el usuario tiene acceso basado en sus roles
+		const userAppRoleIdsSet = new Set((userAppRoleIds || []).map(String));
+		const userAuthRoleIdsSet = new Set((userAuthRoleIds || []).map(String));
+
+		const result = Array.from(cfgTMap.values()).filter(cfgT => {
+			return cfgT.rolesRequeridos.some(({ rol_origen_id, origen }) => {
+				const roleId = String(rol_origen_id);
+				if (origen === 'APP') return userAppRoleIdsSet.has(roleId);
+				if (origen === 'AUTH') return userAuthRoleIdsSet.has(roleId);
+				return false;
+			});
+		});
+
+		// Ordenar por fecha_actualizacion descendente
+		return result.sort(
+			(a, b) => new Date(b.fecha_actualizacion) - new Date(a.fecha_actualizacion)
+		);
+	}
 }
 
 module.exports = CfgTRepository;

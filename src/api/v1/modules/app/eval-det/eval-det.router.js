@@ -1,19 +1,11 @@
 const { Router } = require('express');
 const controller = require('./eval-det.controller');
-const { globalRoles, globalMiddlewares } = require('@middlewares/auth.rol.global');
-const { requireAppRoles } = require('@middlewares/auth.middleware');
+const { ensureAuth } = require('@middlewares/auth.middleware');
+const { requireAuthorization } = require('@middlewares/authorization.middleware');
 
 const router = Router();
 
-if (Array.isArray(globalMiddlewares) && globalMiddlewares.length) {
-	router.use(...globalMiddlewares);
-}
-
-const roleMiddlewares = Array.isArray(globalRoles) && globalRoles.length
-	? requireAppRoles(globalRoles)
-	: [];
-
 // Bulk save respuestas y comentarios
-router.post('/bulk', ...roleMiddlewares, controller.bulkCreate);
+router.post('/bulk', ensureAuth, requireAuthorization(), controller.bulkCreate);
 
 module.exports = router;
