@@ -33,6 +33,16 @@ class EvalRepository {
 		const delegate = this.getDelegate(tx);
 		return delegate.create({ data });
 	}
+
+	async hasExistingEvaluations(configId, username, isStudent) {
+		const count = await this.model.count({
+			where: {
+				id_configuracion: Number(configId),
+				...(isStudent ? { estudiante: String(username) } : { docente: String(username) })
+			}
+		});
+		return count > 0;
+	}
 }
 
 module.exports = EvalRepository;

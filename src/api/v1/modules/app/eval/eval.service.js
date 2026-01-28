@@ -48,6 +48,12 @@ class EvalService {
 		const isEvaluacion = !!cfg?.ct_map?.tipo?.es_evaluacion;
 		const { isDocente, isEstudiante } = this.getRoleFlags(user);
 
+		// Verificar si ya existen evaluaciones generadas
+		const hasEvals = await this.repository.hasExistingEvaluations(configId, username, isEstudiante);
+		if (hasEvals) {
+			throw new AppError('Las evaluaciones ya fueron generadas para esta configuración', 409);
+		}
+
 		// If it's an evaluation, only students generate records (student evaluates teacher by subject)
 		if (isEvaluacion) {
 			if (!isEstudiante) throw new AppError(MESSAGES.GENERAL.AUTHORIZATION.FORBIDDEN, 403);

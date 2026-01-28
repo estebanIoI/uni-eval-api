@@ -11,6 +11,115 @@ function buildVistaWhere({ sede, periodo, programa, semestre, grupo }) {
 	return where;
 }
 
+async function computeEvaluationMetricsFromVista(vista, cfgId) {
+	const estudiantesSet = new Set(vista.map(v => v.ID_ESTUDIANTE).filter(Boolean));
+	const docentesSet = new Set(vista.map(v => v.ID_DOCENTE).filter(Boolean));
+
+	const totalEstudiantes = estudiantesSet.size;
+	const totalDocentes = docentesSet.size;
+
+	// Map universe per (student, docente, asignatura, grupo)
+	const universeKeys = vista
+		.filter(v => v.ID_ESTUDIANTE && v.ID_DOCENTE)
+		.map(v => `${v.ID_ESTUDIANTE}::${v.ID_DOCENTE}::${v.COD_ASIGNATURA}::${v.GRUPO}`);
+
+	// Local evals for cfg and within filtered people
+	const evals = (totalEstudiantes && totalDocentes)
+		? await localPrisma.eval.findMany({
+				where: {
+					id_configuracion: cfgId,
+					estudiante: { in: Array.from(estudiantesSet) },
+					docente: { in: Array.from(docentesSet) }
+				},
+				select: { id: true, estudiante: true, docente: true, codigo_materia: true }
+			})
+		: [];
+
+	const evalIds = evals.map(e => e.id);
+	const evalDetAny = evalIds.length
+		? await localPrisma.eval_det.findMany({
+				where: { eval_id: { in: evalIds } },
+				select: { eval_id: true }
+			})
+		: [];
+	const evalsWithResponses = new Set(evalDetAny.map(d => d.eval_id));
+
+	// Count realizadas only for evals that have at least one response
+	const realizadas = evals.filter(e => evalsWithResponses.has(e.id)).length;
+
+	// Total evaluaciones expected equals count of universe rows
+	const totalEvaluaciones = universeKeys.length;
+	const pendientes = Math.max(totalEvaluaciones - realizadas, 0);
+
+	// Per-student completion: a student is "completed" only if every universe course row has a realized eval
+	const universeByStudent = new Map();
+	for (const v of vista) {
+		if (!v.ID_ESTUDIANTE || !v.ID_DOCENTE) continue;
+		const list = universeByStudent.get(v.ID_ESTUDIANTE) || [];
+		list.push(`${v.ID_ESTUDIANTE}::${v.ID_DOCENTE}::${v.COD_ASIGNATURA}::${v.GRUPO}`);
+		universeByStudent.set(v.ID_ESTUDIANTE, list);
+	}
+
+	// Build set of realized keys from local evals with responses
+	const realizedKeys = new Set(
+		evals
+			.filter(e => evalsWithResponses.has(e.id))
+			.map(e => `${e.estudiante}::${e.docente}::${Number(e.codigo_materia) || ''}::${''}`)
+	);
+
+	let completedStudents = 0;
+	for (const [student, keys] of universeByStudent.entries()) {
+		// For completion, ensure every key has a realized eval; match by student + docente + COD_ASIGNATURA
+		const allDone = keys.every(k => {
+			const [s, d, cod] = k.split('::');
+			const keySimple = `${s}::${d}::${cod}::`;
+			return realizedKeys.has(keySimple);
+		});
+		if (allDone) completedStudents += 1;
+	}
+	const totalEstudiantesPendientes = totalEstudiantes - completedStudents;
+
+	// Per-docente completion: docente is "completed" only if all their students have completed all their evaluations
+	const studentsByDocente = new Map();
+	for (const v of vista) {
+		if (!v.ID_DOCENTE || !v.ID_ESTUDIANTE) continue;
+		const set = studentsByDocente.get(v.ID_DOCENTE) || new Set();
+		set.add(v.ID_ESTUDIANTE);
+		studentsByDocente.set(v.ID_DOCENTE, set);
+	}
+
+	let completedDocentes = 0;
+	for (const [doc, stuSet] of studentsByDocente.entries()) {
+		// docente completed if every student in their set is in completedStudents set
+		const allStudentsCompleted = Array.from(stuSet).every(stu => {
+			const keys = universeByStudent.get(stu) || [];
+			return keys.every(k => {
+				const [s, d, cod] = k.split('::');
+				if (d !== doc) return true; // only consider pairs with this docente
+				const keySimple = `${s}::${d}::${cod}::`;
+				return realizedKeys.has(keySimple);
+			});
+		});
+		if (allStudentsCompleted) completedDocentes += 1;
+	}
+	const totalDocentesPendientes = totalDocentes - completedDocentes;
+
+	const total_evaluaciones_registradas = evals.length;
+	const total_estudiantes_registrados = new Set(evals.map(e => e.estudiante).filter(Boolean)).size;
+
+	return {
+		total_evaluaciones: totalEvaluaciones,
+		total_evaluaciones_registradas,
+		total_realizadas: realizadas,
+		total_pendientes: pendientes,
+		total_estudiantes: totalEstudiantes,
+		total_estudiantes_registrados,
+		total_estudiantes_pendientes: totalEstudiantesPendientes,
+		total_docentes: totalDocentes,
+		total_docentes_pendientes: totalDocentesPendientes
+	};
+}
+
 async function getEvaluationSummary({ cfg_t, sede, periodo, programa, semestre, grupo }) {
 	const cfgId = Number(cfg_t);
 	if (!cfgId) throw new Error('cfg_t is required');
@@ -113,27 +222,86 @@ async function getEvaluationSummary({ cfg_t, sede, periodo, programa, semestre, 
 	}
 	const totalDocentesPendientes = totalDocentes - completedDocentes;
 
+	// Only apply dynamic filters if there are results in the filtered view
+	// If no filters are applied and vista is empty, count all registrations for cfg_t
+	const hasFilters = Boolean(sede || periodo || programa || semestre || grupo);
+	const evalCountWhere = {
+		id_configuracion: cfgId,
+		...(hasFilters && { estudiante: { in: Array.from(estudiantesSet) }, docente: { in: Array.from(docentesSet) } })
+	};
+
+	const total_evaluaciones_registradas = await localPrisma.eval.count({ where: evalCountWhere });
+	
+	const estudiantesRegWhere = {
+		id_configuracion: cfgId,
+		...(hasFilters && { estudiante: { in: Array.from(estudiantesSet) }, docente: { in: Array.from(docentesSet) } })
+	};
+	const total_estudiantes_registrados = (await localPrisma.eval.findMany({
+		where: estudiantesRegWhere,
+		select: { estudiante: true }
+	})).reduce((set, e) => {
+		if (e.estudiante) set.add(e.estudiante);
+		return set;
+	}, new Set()).size;
+
 	return {
 		generales: {
 			total_evaluaciones: totalEvaluaciones,
 			// Evaluations registered in local (records created), regardless of responses
-			total_evaluaciones_registradas: await localPrisma.eval.count({ where: { id_configuracion: cfgId } }),
+			total_evaluaciones_registradas,
 			total_realizadas: realizadas,
 			total_pendientes: pendientes,
 			total_estudiantes: totalEstudiantes,
 			// Students who have entered and loaded their courses (unique in local eval), regardless of answering
-			total_estudiantes_registrados: (await localPrisma.eval.findMany({
-				where: { id_configuracion: cfgId },
-				select: { estudiante: true }
-			})).reduce((set, e) => {
-				if (e.estudiante) set.add(e.estudiante);
-				return set;
-			}, new Set()).size,
+			total_estudiantes_registrados,
 			total_estudiantes_pendientes: totalEstudiantesPendientes,
 			total_docentes: totalDocentes,
 			total_docentes_pendientes: totalDocentesPendientes
 		}
 	};
+}
+
+async function getEvaluationSummaryByProgram({ cfg_t, sede, periodo, semestre }) {
+	const cfgId = Number(cfg_t);
+	if (!cfgId) throw new Error('cfg_t is required');
+
+	const whereVista = buildVistaWhere({ sede, periodo, semestre });
+
+	const vista = await userPrisma.vista_academica_insitus.findMany({
+		where: whereVista,
+		select: { ID_ESTUDIANTE: true, ID_DOCENTE: true, COD_ASIGNATURA: true, GRUPO: true, NOM_PROGRAMA: true }
+	});
+
+	const byPrograma = new Map();
+	for (const v of vista) {
+		const programaNombre = v.NOM_PROGRAMA || 'SIN_PROGRAMA';
+		const list = byPrograma.get(programaNombre) || [];
+		list.push(v);
+		byPrograma.set(programaNombre, list);
+	}
+
+	const programas = [];
+	for (const [nombre, rows] of byPrograma.entries()) {
+		const metricas = await computeEvaluationMetricsFromVista(rows, cfgId);
+
+		const byGrupo = new Map();
+		for (const r of rows) {
+			const grupoNombre = r.GRUPO || 'SIN_GRUPO';
+			const list = byGrupo.get(grupoNombre) || [];
+			list.push(r);
+			byGrupo.set(grupoNombre, list);
+		}
+
+		const grupos = [];
+		for (const [grupo, rowsGrupo] of byGrupo.entries()) {
+			const metricasGrupo = await computeEvaluationMetricsFromVista(rowsGrupo, cfgId);
+			grupos.push({ grupo, metricas: metricasGrupo });
+		}
+
+		programas.push({ nombre, metricas, grupos });
+	}
+
+	return { programas };
 }
 
 async function getDocenteStats({ cfg_t, docente, sede, periodo, programa, semestre, grupo }) {
@@ -304,53 +472,22 @@ async function getRanking({ cfg_t, sede, periodo, programa, semestre, grupo }) {
 	return { ranking: results };
 }
 
-async function getDocenteCompletion({ cfg_t, docente, sede, periodo, programa, semestre, grupo }) {
-	const cfgId = Number(cfg_t);
-	if (!cfgId) throw new Error('cfg_t is required');
-	if (!docente) throw new Error('docente is required');
-
-	const whereVista = buildVistaWhere({ sede, periodo, programa, semestre, grupo });
-	whereVista.ID_DOCENTE = docente;
-
-	const vista = await userPrisma.vista_academica_insitus.findMany({
-		where: whereVista,
-		select: { ID_ESTUDIANTE: true, PRIMER_APELLIDO: true, SEGUNDO_APELLIDO: true, PRIMER_NOMBRE: true, SEGUNDO_NOMBRE: true, DOCENTE: true }
-	});
-	const nameById = new Map(
-		vista
-			.filter(v => v.ID_ESTUDIANTE)
-			.map(v => [
-				v.ID_ESTUDIANTE,
-				[ v.PRIMER_APELLIDO, v.SEGUNDO_APELLIDO, v.PRIMER_NOMBRE, v.SEGUNDO_NOMBRE ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
-			])
-	);
-	const allStudents = Array.from(new Set(vista.map(v => v.ID_ESTUDIANTE).filter(Boolean))).map(id => ({ id, nombre: nameById.get(id) || null }));
-
-	const realizados = await localPrisma.eval.findMany({
-		where: { id_configuracion: cfgId, docente },
-		select: { estudiante: true }
-	});
-	const doneSet = new Set(realizados.map(r => r.estudiante).filter(Boolean));
-
-	const completados = allStudents.filter(s => doneSet.has(s.id));
-	const pendientes = allStudents.filter(s => !doneSet.has(s.id));
-
-	const docenteNombre = vista.find(v => v.DOCENTE)?.DOCENTE || null;
-	return { docente, docente_nombre: docenteNombre, completados, pendientes };
-}
-
-async function getDocenteAspectMetrics({ cfg_t, docente, sede, periodo, programa, semestre, grupo }) {
+async function getDocenteAspectMetrics({ cfg_t, docente, codigo_materia, sede, periodo, programa, semestre, grupo }) {
 	const cfgId = Number(cfg_t);
 	if (!cfgId) throw new Error('cfg_t is required');
 	if (!docente) throw new Error('docente is required');
 
 	// Filter evals for this docente
+	const whereClause = { id_configuracion: cfgId, docente };
+	if (codigo_materia) {
+		whereClause.codigo_materia = String(codigo_materia);
+	}
 	const evals = await localPrisma.eval.findMany({
-		where: { id_configuracion: cfgId, docente },
+		where: whereClause,
 		select: { id: true }
 	});
 	const evalIds = evals.map(e => e.id);
-	if (!evalIds.length) return { docente, aspectos: [] };
+	if (!evalIds.length) return { docente, codigo_materia: codigo_materia ? String(codigo_materia) : null, aspectos: [] };
 
 	// Get all responses with aspect IDs
 	const detalles = await localPrisma.eval_det.findMany({
@@ -358,7 +495,7 @@ async function getDocenteAspectMetrics({ cfg_t, docente, sede, periodo, programa
 		select: { a_e_id: true }
 	});
 	const aeIds = Array.from(new Set(detalles.map(d => d.a_e_id)));
-	if (!aeIds.length) return { docente, aspectos: [] };
+	if (!aeIds.length) return { docente, codigo_materia: codigo_materia ? String(codigo_materia) : null, aspectos: [] };
 
 	// Map a_e -> aspecto_id and escala_id
 	const aeRecords = await localPrisma.a_e.findMany({
@@ -440,10 +577,10 @@ async function getDocenteAspectMetrics({ cfg_t, docente, sede, periodo, programa
 		desviacion = Math.sqrt(variance);
 	}
 
-	return { docente, suma_total: sumaTotal, total_respuestas: totalRespuestas, promedio, desviacion, aspectos };
+	return { docente, codigo_materia: codigo_materia ? String(codigo_materia) : null, suma_total: sumaTotal, total_respuestas: totalRespuestas, promedio, desviacion, aspectos };
 }
 
-async function getDocenteMateriaMetrics({ cfg_t, docente, sede, periodo, programa, semestre, grupo }) {
+async function getDocenteMateriaMetrics({ cfg_t, docente, codigo_materia, sede, periodo, programa, semestre, grupo }) {
 	const cfgId = Number(cfg_t);
 	if (!cfgId) throw new Error('cfg_t is required');
 	if (!docente) throw new Error('docente is required');
@@ -451,6 +588,13 @@ async function getDocenteMateriaMetrics({ cfg_t, docente, sede, periodo, program
 	// Build filtered universe of courses (per docente)
 	const whereVista = buildVistaWhere({ sede, periodo, programa, semestre, grupo });
 	whereVista.ID_DOCENTE = docente;
+	if (codigo_materia) {
+		// COD_ASIGNATURA is INT, convert string to number
+		const codigoMatNum = Number(codigo_materia);
+		if (!isNaN(codigoMatNum)) {
+			whereVista.COD_ASIGNATURA = codigoMatNum;
+		}
+	}
 	const cursos = await userPrisma.vista_academica_insitus.findMany({
 		where: whereVista,
 		select: { COD_ASIGNATURA: true, ASIGNATURA: true, ID_ESTUDIANTE: true }
@@ -548,27 +692,32 @@ async function getDocenteMateriaCompletion({ cfg_t, docente, codigo_materia, sed
 
 	const whereVista = buildVistaWhere({ sede, periodo, programa, semestre, grupo });
 	whereVista.ID_DOCENTE = docente;
-	whereVista.COD_ASIGNATURA = Number(codigo_materia);
+	const codigoMatNum = Number(codigo_materia);
+	if (!isNaN(codigoMatNum)) {
+		whereVista.COD_ASIGNATURA = codigoMatNum;
+	}
 
 	const vista = await userPrisma.vista_academica_insitus.findMany({
 		where: whereVista,
-		select: { ID_ESTUDIANTE: true, PRIMER_APELLIDO: true, SEGUNDO_APELLIDO: true, PRIMER_NOMBRE: true, SEGUNDO_NOMBRE: true }
+		select: { ID_ESTUDIANTE: true, PRIMER_APELLIDO: true, SEGUNDO_APELLIDO: true, PRIMER_NOMBRE: true, SEGUNDO_NOMBRE: true, GRUPO: true }
 	});
-	const students = Array.from(
-		new Map(
-			vista
-				.filter(v => v.ID_ESTUDIANTE)
-				.map(v => [
-					v.ID_ESTUDIANTE,
-					{
-						id: v.ID_ESTUDIANTE,
-						nombre: [v.PRIMER_APELLIDO, v.SEGUNDO_APELLIDO, v.PRIMER_NOMBRE, v.SEGUNDO_NOMBRE]
-							.filter(Boolean)
-							.join(' ').replace(/\s+/g, ' ').trim()
-					}
-				])
-		).values()
-	);
+
+	// Group students by GRUPO
+	const byGrupo = new Map();
+	for (const v of vista) {
+		if (!v.ID_ESTUDIANTE) continue;
+		const grupoKey = v.GRUPO || 'SIN_GRUPO';
+		const entry = byGrupo.get(grupoKey) || { grupo: grupoKey, students: new Map() };
+		if (!entry.students.has(v.ID_ESTUDIANTE)) {
+			entry.students.set(v.ID_ESTUDIANTE, {
+				id: v.ID_ESTUDIANTE,
+				nombre: [v.PRIMER_APELLIDO, v.SEGUNDO_APELLIDO, v.PRIMER_NOMBRE, v.SEGUNDO_NOMBRE]
+					.filter(Boolean)
+					.join(' ').replace(/\s+/g, ' ').trim()
+			});
+		}
+		byGrupo.set(grupoKey, entry);
+	}
 
 	// Find evals for this docente + materia with responses
 	const evals = await localPrisma.eval.findMany({
@@ -580,10 +729,16 @@ async function getDocenteMateriaCompletion({ cfg_t, docente, codigo_materia, sed
 	const withResp = new Set(det.map(d => d.eval_id));
 	const completedIds = new Set(evals.filter(e => withResp.has(e.id)).map(e => e.estudiante).filter(Boolean));
 
-	const completados = students.filter(s => completedIds.has(s.id));
-	const pendientes = students.filter(s => !completedIds.has(s.id));
+	// Build result per group
+	const grupos = [];
+	for (const { grupo, students } of byGrupo.values()) {
+		const allStudents = Array.from(students.values());
+		const completados = allStudents.filter(s => completedIds.has(s.id));
+		const pendientes = allStudents.filter(s => !completedIds.has(s.id));
+		grupos.push({ grupo, completados, pendientes });
+	}
 
-	return { docente, codigo_materia: String(codigo_materia), completados, pendientes };
+	return { docente, codigo_materia: String(codigo_materia), grupos };
 }
 
 // Aspect metrics for a docente within a specific subject (codigo_materia)
@@ -863,12 +1018,11 @@ async function getDocenteCommentsWithMetrics({ cfg_t, docente, codigo_materia, s
 
 module.exports = {
 	getEvaluationSummary,
+	getEvaluationSummaryByProgram,
 	getDocenteStats,
 	getRanking,
-	getDocenteCompletion,
 	getDocenteAspectMetrics,
 	getDocenteMateriaMetrics,
 	getDocenteMateriaCompletion,
-	getDocenteMateriaAspectMetrics,
 	getDocenteCommentsWithMetrics,
 };

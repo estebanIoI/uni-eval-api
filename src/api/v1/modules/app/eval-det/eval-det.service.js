@@ -56,6 +56,12 @@ class EvalDetService {
 		}
 		if (!items.length) return { count: 0 };
 
+		// Verificar si ya existen respuestas guardadas
+		const hasDetails = await this.repository.hasExistingDetails(Number(eval_id));
+		if (hasDetails) {
+			throw new AppError('Las respuestas de esta evaluación ya fueron guardadas', 409);
+		}
+
 		const aeIds = items.map(i => Number(i.a_e_id)).filter(Boolean);
 		if (!aeIds.length) throw new AppError('Items sin a_e_id', 400);
 

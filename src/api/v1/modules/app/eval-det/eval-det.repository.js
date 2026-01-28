@@ -20,6 +20,13 @@ class EvalDetRepository {
 		});
 	}
 
+	async hasExistingDetails(evalId) {
+		const count = await prisma.eval_det.count({
+			where: { eval_id: evalId }
+		});
+		return count > 0;
+	}
+
 	async createMany(evalId, items, cmtGen) {
 		if (!items.length) return { count: 0 };
 		return prisma.$transaction(async (tx) => {

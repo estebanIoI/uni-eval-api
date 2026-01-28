@@ -50,6 +50,10 @@ async function evaluationSummary(query) {
 	return repo.getEvaluationSummary(query);
 }
 
+async function evaluationSummaryByProgram(query) {
+    return repo.getEvaluationSummaryByProgram(query);
+}
+
 async function docenteStats(query) {
 	return repo.getDocenteStats(query);
 }
@@ -58,24 +62,16 @@ async function ranking(query) {
 	return repo.getRanking(query);
 }
 
-async function docenteCompletion(query) {
-	return repo.getDocenteCompletion(query);
-}
-
 async function docenteAspectMetrics(query) {
-	return repo.getDocenteAspectMetrics(query);
+    return repo.getDocenteAspectMetrics(query);
 }
 
 async function docenteMateriaMetrics(query) {
-	return repo.getDocenteMateriaMetrics(query);
+    return repo.getDocenteMateriaMetrics(query);
 }
 
 async function docenteMateriaCompletion(query) {
-	return repo.getDocenteMateriaCompletion(query);
-}
-
-async function docenteMateriaAspectMetrics(query) {
-	return repo.getDocenteMateriaAspectMetrics(query);
+    return repo.getDocenteMateriaCompletion(query);
 }
 
 async function docenteComments(query) {
@@ -453,15 +449,14 @@ async function generateDocxReport({
 }
 
 module.exports = {
-	evaluationSummary,
-	docenteStats,
-	ranking,
-	docenteCompletion,
-	docenteAspectMetrics,
-	docenteMateriaMetrics,
-	docenteMateriaCompletion,
-	docenteMateriaAspectMetrics,
+    evaluationSummary,
+    evaluationSummaryByProgram,
+    docenteStats,
+    ranking,
+    docenteAspectMetrics,
+    docenteMateriaMetrics,
+    docenteMateriaCompletion,
     docenteComments,
     docenteCommentsAnalysis,
-	generateDocxReport,
+    generateDocxReport,
 };

@@ -9,6 +9,15 @@ async function summary(req, res, next) {
 	}
 }
 
+async function summaryByProgram(req, res, next) {
+	try {
+		const data = await service.evaluationSummaryByProgram(req.query);
+		res.json(data);
+	} catch (err) {
+		next(err);
+	}
+}
+
 async function docente(req, res, next) {
 	try {
 		const data = await service.docenteStats({ ...req.query, docente: req.params.docente });
@@ -21,15 +30,6 @@ async function docente(req, res, next) {
 async function ranking(req, res, next) {
 	try {
 		const data = await service.ranking(req.query);
-		res.json(data);
-	} catch (err) {
-		next(err);
-	}
-}
-
-async function docenteCompletion(req, res, next) {
-	try {
-		const data = await service.docenteCompletion({ ...req.query, docente: req.params.docente });
 		res.json(data);
 	} catch (err) {
 		next(err);
@@ -57,15 +57,6 @@ async function docenteMateriaMetrics(req, res, next) {
 async function docenteMateriaCompletion(req, res, next) {
 	try {
 		const data = await service.docenteMateriaCompletion({ ...req.query, docente: req.params.docente, codigo_materia: req.params.codigo_materia });
-		res.json(data);
-	} catch (err) {
-		next(err);
-	}
-}
-
-async function docenteMateriaAspectMetrics(req, res, next) {
-	try {
-		const data = await service.docenteMateriaAspectMetrics({ ...req.query, docente: req.params.docente, codigo_materia: req.params.codigo_materia });
 		res.json(data);
 	} catch (err) {
 		next(err);
@@ -108,13 +99,12 @@ async function docenteReportDocx(req, res, next) {
 
 module.exports = {
 	summary,
+	summaryByProgram,
 	docente,
 	ranking,
-	docenteCompletion,
 	docenteAspectMetrics,
 	docenteMateriaMetrics,
 	docenteMateriaCompletion,
-	docenteMateriaAspectMetrics,
 	docenteComments,
 	docenteCommentsAnalysis,
 	docenteReportDocx,
