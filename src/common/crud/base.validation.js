@@ -6,7 +6,8 @@
 const path = require('path');
 const { SchemaLoader, SchemaFactory } = require('@common/validation/schema.factory');
 const { EntityValidator } = require('@common/validation/entity.validator');
-const { validate, validateId, validatePagination } = require('@common/validation/validation.middleware');
+const { validate, validateId } = require('@common/validation/validation.middleware');
+const pagination = require('@middlewares/pagination');
 const { prisma } = require('@config/prisma');
 
 // Loader global para schemas
@@ -107,7 +108,7 @@ function createValidation(modelName, customRules = {}, options = {}) {
       update: validate(updateValidator),
       delete: validateId(),
       getById: validateId(),
-      getAll: validatePagination({ maxLimit: 100 }),
+      getAll: pagination({ maxLimit: 100 }),
       bulk: validate(bulkValidator),
       toggle: toggleValidator ? validate(toggleValidator) : null
     };

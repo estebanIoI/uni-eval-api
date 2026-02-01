@@ -126,6 +126,12 @@ function createRelationsController(config) {
         };
       }
 
+      const normalizedItems = itemData.map((item) => {
+        if (typeof item === 'number') return { id: item };
+        if (item && typeof item === 'object' && typeof item.id === 'number') return item;
+        return item;
+      });
+
       const transaction = await prisma.$transaction(async (tx) => {
         let category;
 
@@ -155,8 +161,8 @@ function createRelationsController(config) {
         }
 
         // --- Procesar ítems ---
-        const itemPromises = itemData.map(async (item) => {
-          if (item.id) {
+        const itemPromises = normalizedItems.map(async (item) => {
+          if (item && typeof item.id === 'number') {
             const existingItem = await tx[itemModel].findUnique({
               where: { id: item.id }
             });
@@ -174,7 +180,7 @@ function createRelationsController(config) {
               }
             });
           } else {
-            if (!item.nombre) {
+            if (!item || !item.nombre) {
               throw {
                 status: 400,
                 message: 'Cada elemento nuevo requiere el campo "nombre".'

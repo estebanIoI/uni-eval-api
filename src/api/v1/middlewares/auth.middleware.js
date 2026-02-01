@@ -191,4 +191,4 @@ function requireGlobalRole(req, res, next) {
   }
 }
 
-module.exports = { ensureAuth, requireAppRoles, requireAuthRoles, requireRoles, requireGlobalRole };
+module.exports = { ensureAuth, requireAppRoles, requireAuthRoles, requireRoles, requireGlobalRole, hasGlobalRole };

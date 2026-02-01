@@ -11,4 +11,7 @@ router.get('/r', ensureAuth, requireAuthorization(), controller.getCfgTList);
 // GET /cfg/t/:id/a-e -> aspectos y escalas relacionados via a_e
 router.get('/:id/a-e', ensureAuth, requireAuthorization(), controller.getAspectosEscalas);
 
+// GET /cfg/t/:id/cfg-a_cfg-e -> configuración de cfg_a y cfg_e
+router.get('/:id/cfg-a_cfg-e', ensureAuth, requireAuthorization(), controller.getCfgAAndCfgE);
+
 module.exports = router;

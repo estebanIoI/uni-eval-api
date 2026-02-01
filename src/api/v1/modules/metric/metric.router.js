@@ -12,11 +12,14 @@ router.get('/evaluations/summary/programas', ctrl.summaryByProgram);
 // GET /metric/evaluations/ranking?cfg_t=1&...filters
 router.get('/evaluations/ranking', ctrl.ranking);
 
-// GET /metric/evaluations/docente/:docente?cfg_t=1&...filters
-router.get('/evaluations/docente/:docente', ctrl.docente);
+// GET /metric/evaluations/docente?cfg_t=1&docente=...&...filters
+// If docente is not provided, returns stats for all docentes
+router.get('/evaluations/docentes', ctrl.docente);
 
-// GET /metric/evaluations/docente/:docente/aspectos?cfg_t=1&codigo_materia=...&...filters
-router.get('/evaluations/docente/:docente/aspectos', ctrl.docenteAspectMetrics);
+// GET /metric/evaluations/docente/aspectos?cfg_t=1&docente=...&codigo_materia=...
+// docente y codigo_materia son opcionales en query
+// Si no se especifica docente, retorna métricas agregadas de todos los docentes
+router.get('/evaluations/docentes/aspectos', ctrl.docenteAspectMetrics);
 
 // GET /metric/evaluations/docente/:docente/materias?cfg_t=1&...filters
 router.get('/evaluations/docente/:docente/materias', ctrl.docenteMateriaMetrics);

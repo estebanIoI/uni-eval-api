@@ -4,6 +4,7 @@ const BaseController = require('./base.controller');
 const baseRouter = require('./base.router');
 const buildCrudDocs = require('./base.swagger');
 const { extractSchemaFromPrisma } = require('../extractSchemaPrisma');
+const pagination = require('@middlewares/pagination');
 
 function extractBooleanFields(schema) {
   if (!schema || typeof schema !== 'object') return [];
@@ -28,7 +29,18 @@ function createCrudModule(options, manualSchema = null, routerConfig = {}) {
     const service = new BaseService(repo, { booleanFields });
     const controller = new BaseController(service);
     const realRoute = `/${legacyName}`;
-    const router = baseRouter(controller, realRoute, { ...routerConfig, booleanFields });
+    
+    // Si no hay validación, agregar middleware de paginación por defecto
+    const finalRouterConfig = { ...routerConfig, booleanFields };
+    if (!routerConfig.validation) {
+      finalRouterConfig.validation = {
+        middlewares: {
+          getAll: pagination({ maxLimit: 100 })
+        }
+      };
+    }
+    
+    const router = baseRouter(controller, realRoute, finalRouterConfig);
     const disable = Array.isArray(routerConfig.disable) ? routerConfig.disable : [];
     const docs = buildCrudDocs(
       { name: legacyName, route: realRoute, displayName: legacyName, schemaName: legacyName, disable, booleanFields },
@@ -51,7 +63,18 @@ function createCrudModule(options, manualSchema = null, routerConfig = {}) {
   const controller = new BaseController(service);
 
   const realRoute = route || `/${name}`;
-  const router = baseRouter(controller, realRoute, { ...routerConfig, booleanFields });
+  
+  // Si no hay validación, agregar middleware de paginación por defecto
+  const finalRouterConfig = { ...routerConfig, booleanFields };
+  if (!routerConfig.validation) {
+    finalRouterConfig.validation = {
+      middlewares: {
+        getAll: pagination({ maxLimit: 100 })
+      }
+    };
+  }
+  
+  const router = baseRouter(controller, realRoute, finalRouterConfig);
 
   // Unir disables provenientes de options y routerConfig (si existen)
   const combinedDisable = [

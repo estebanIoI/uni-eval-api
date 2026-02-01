@@ -161,13 +161,23 @@ function buildRelationsDocs(options) {
                   categoryData: {
                     type: 'object',
                     properties: {
+                      id: { type: 'integer' },
                       nombre: { type: 'string' },
                       descripcion: { type: 'string' },
                     },
                   },
                   itemData: {
                     type: 'array',
-                    items: { $ref: `#/components/schemas/Create${itemSchemaName}Input` }
+                    items: {
+                      oneOf: [
+                        { type: 'integer' },
+                        { $ref: `#/components/schemas/Create${itemSchemaName}Input` },
+                        {
+                          type: 'object',
+                          properties: { id: { type: 'integer' } }
+                        }
+                      ]
+                    }
                   },
                 },
               },

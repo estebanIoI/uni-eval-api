@@ -26,6 +26,16 @@ class CfgTController {
 			next(err);
 		}
 	};
+
+	getCfgAAndCfgE = async (req, res, next) => {
+		try {
+			const cfgTId = Number(req.params.id);
+			const data = await service.getCfgAAndCfgE(cfgTId);
+			return successResponse(res, { message: 'Configuración cfg_a y cfg_e obtenida', data });
+		} catch (err) {
+			next(err);
+		}
+	};
 }
 
 module.exports = new CfgTController();

@@ -61,9 +61,36 @@ class DataloginService {
   // Issue short-lived access token
   createAccessToken(payload) {
     if (!jwtConfig.secret) throw new AppError(MESSAGES.GENERAL.SERVER.SERVER_ERROR, 500);
-    return jwt.sign(payload, jwtConfig.secret, {
+    const accessToken = jwt.sign(payload, jwtConfig.secret, {
       expiresIn: jwtConfig.expiresIn || '15m'
     });
+    
+    // Calcular el tiempo de expiración del access token
+    const expiresInMs = this.parseExpireTime(jwtConfig.expiresIn || '15m');
+    const accessTokenExpiresAt = new Date(Date.now() + expiresInMs);
+    
+    return { accessToken, accessTokenExpiresAt };
+  }
+  
+  /**
+   * Convertir string de expiration a milisegundos
+   * Ej: "15m" -> 900000ms, "7d" -> 604800000ms
+   */
+  parseExpireTime(expireStr) {
+    const matches = expireStr.match(/^(\d+)([smhd])$/);
+    if (!matches) return 15 * 60 * 1000; // Default: 15 minutos
+    
+    const value = parseInt(matches[1], 10);
+    const unit = matches[2];
+    
+    const unitsMs = {
+      s: 1000,
+      m: 60 * 1000,
+      h: 60 * 60 * 1000,
+      d: 24 * 60 * 60 * 1000
+    };
+    
+    return value * (unitsMs[unit] || 1000);
   }
 
   // Create and persist a hashed refresh token (single session per user)
@@ -138,7 +165,7 @@ class DataloginService {
       rolesIds
     };
 
-    const accessToken = this.createAccessToken(payload);
+    const { accessToken, accessTokenExpiresAt } = this.createAccessToken(payload);
 
     // Create secure refresh token and persist hash
     const { refreshToken, jti, exp } = await this.createAndStoreRefreshToken(user);
@@ -146,6 +173,7 @@ class DataloginService {
     const { user_password, user_idrole, user_statusid, role_name, role, ...safeUser } = user;
     return {
       accessToken,
+      accessTokenExpiresAt,
       refreshToken,
       jti,
       refreshExpiresAt: exp,
@@ -213,7 +241,7 @@ class DataloginService {
       rolesIds
     };
 
-    const accessToken = this.createAccessToken(payload);
+    const { accessToken, accessTokenExpiresAt } = this.createAccessToken(payload);
 
     // Rotate refresh: revoke old and create new
     await this.repository.revokeByUser(userId);
@@ -221,6 +249,7 @@ class DataloginService {
 
     return {
       accessToken,
+      accessTokenExpiresAt,
       refreshToken,
       jti,
       refreshExpiresAt: exp

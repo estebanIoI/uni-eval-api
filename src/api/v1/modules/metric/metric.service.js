@@ -55,7 +55,11 @@ async function evaluationSummaryByProgram(query) {
 }
 
 async function docenteStats(query) {
-	return repo.getDocenteStats(query);
+	const { page, limit, ...filterQuery } = query;
+	if (!filterQuery.docente) {
+		return repo.getAllDocentesStats({ ...filterQuery, page: parseInt(page) || 1, limit: parseInt(limit) || 10 });
+	}
+	return repo.getDocenteStats(filterQuery);
 }
 
 async function ranking(query) {

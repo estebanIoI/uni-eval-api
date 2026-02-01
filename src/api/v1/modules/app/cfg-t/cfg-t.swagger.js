@@ -16,9 +16,6 @@
  *           type: integer
  *         tipo_evaluacion_id:
  *           type: integer
- *         tipo_evaluacion:
- *           type: string
- *           nullable: true
  *         fecha_inicio:
  *           type: string
  *           format: date
@@ -105,6 +102,78 @@
  *           type: array
  *           items:
  *             $ref: '#/components/schemas/AERelacion'
+ *
+ *     CfgA:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         cfg_t_id:
+ *           type: integer
+ *         aspecto_id:
+ *           type: integer
+ *         orden:
+ *           type: number
+ *         es_activo:
+ *           type: boolean
+ *         aspecto:
+ *           type: object
+ *           nullable: true
+ *           properties:
+ *             id:
+ *               type: integer
+ *             nombre:
+ *               type: string
+ *             descripcion:
+ *               type: string
+ *               nullable: true
+ *
+ *     CfgE:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         cfg_t_id:
+ *           type: integer
+ *         escala_id:
+ *           type: integer
+ *         puntaje:
+ *           type: number
+ *         orden:
+ *           type: number
+ *         es_activo:
+ *           type: boolean
+ *         escala:
+ *           type: object
+ *           nullable: true
+ *           properties:
+ *             id:
+ *               type: integer
+ *             sigla:
+ *               type: string
+ *             nombre:
+ *               type: string
+ *             descripcion:
+ *               type: string
+ *               nullable: true
+ *
+ *     CfgACfgEResponse:
+ *       type: object
+ *       properties:
+ *         message:
+ *           type: string
+ *           example: Configuración cfg_a y cfg_e obtenida
+ *         data:
+ *           type: object
+ *           properties:
+ *             cfg_a:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/CfgA'
+ *             cfg_e:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/CfgE'
  */
 
 /**
@@ -146,6 +215,32 @@
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/AEResponse'
+ *       400:
+ *         description: Solicitud inválida
+ *       404:
+ *         description: No encontrado
+ */
+
+/**
+ * @swagger
+ * /cfg/t/{id}/cfg-a_cfg-e:
+ *   get:
+ *     summary: Obtiene la configuración cfg_a y cfg_e
+ *     tags: [Configuración Tipo]
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID de cfg_t
+ *     responses:
+ *       200:
+ *         description: Configuración cfg_a y cfg_e
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CfgACfgEResponse'
  *       400:
  *         description: Solicitud inválida
  *       404:

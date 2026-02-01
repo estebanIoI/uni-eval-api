@@ -70,21 +70,19 @@
 
 /**
  * @swagger
- * /metric/evaluations/docente/{docente}/aspectos:
+ * /metric/evaluations/docentes/aspectos:
  *   get:
- *     summary: Métricas por aspecto para un docente (opcionalmente filtrado por materia)
+ *     summary: Métricas por aspecto - docente específico o agregadas de todos
  *     description: |
- *       Retorna métricas desagregadas por aspecto para un docente.
- *       Si se proporciona codigo_materia, filtra solo a esa materia.
- *       Si no, retorna métricas de TODAS las materias del docente.
+ *       Retorna métricas desagregadas por aspecto.
+ *       
+ *       **Comportamientos:**
+ *       - Si se proporciona `docente`: Retorna métricas para ese docente específico.
+ *       - Si NO se proporciona `docente`: Retorna métricas AGREGADAS de TODOS los docentes.
+ *       
+ *       En ambos casos, `codigo_materia` es opcional para filtrar por materia.
  *     tags: [Metric]
  *     parameters:
- *       - in: path
- *         name: docente
- *         required: true
- *         schema:
- *           type: string
- *         description: ID/código del docente
  *       - in: query
  *         name: cfg_t
  *         required: true
@@ -92,11 +90,17 @@
  *           type: integer
  *         description: ID de la configuración de evaluación
  *       - in: query
+ *         name: docente
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: ID/código del docente (opcional). Si se omite, retorna métricas agregadas de todos.
+ *       - in: query
  *         name: codigo_materia
  *         required: false
  *         schema:
  *           type: string
- *         description: Código de la materia (opcional). Si se proporciona, filtra métricas a esa materia.
+ *         description: Código de la materia (opcional). Filtra a esa materia.
  *       - in: query
  *         name: sede
  *         required: false
@@ -133,64 +137,86 @@
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 docente:
- *                   type: string
- *                   example: "79864589"
- *                 codigo_materia:
- *                   type: string
- *                   nullable: true
- *                   description: Código de la materia (null si no se filtró por materia)
- *                   example: null
- *                 suma_total:
- *                   type: number
- *                   description: Suma total de puntajes
- *                   example: 11.5
- *                 total_respuestas:
- *                   type: integer
- *                   description: Total de respuestas recolectadas
- *                   example: 8
- *                 promedio:
- *                   type: number
- *                   nullable: true
- *                   description: Promedio general (null si no hay aspectos con escala)
- *                   example: 1.4375
- *                 desviacion:
- *                   type: number
- *                   nullable: true
- *                   description: Desviación estándar
- *                   example: 0.726
- *                 aspectos:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       aspecto_id:
- *                         type: integer
- *                         example: 1
- *                       nombre:
+ *               oneOf:
+ *                 - type: object
+ *                   description: Cuando se especifica docente
+ *                   properties:
+ *                     docente:
+ *                       type: string
+ *                       example: "79864589"
+ *                     codigo_materia:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "6655"
+ *                     suma_total:
+ *                       type: number
+ *                       example: 11.5
+ *                     total_respuestas:
+ *                       type: integer
+ *                       example: 8
+ *                     promedio:
+ *                       type: number
+ *                       nullable: true
+ *                       example: 1.4375
+ *                     desviacion:
+ *                       type: number
+ *                       nullable: true
+ *                       example: 0.726
+ *                     aspectos:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           aspecto_id:
+ *                             type: integer
+ *                           nombre:
+ *                             type: string
+ *                           total_respuestas:
+ *                             type: integer
+ *                           suma:
+ *                             type: number
+ *                 - type: object
+ *                   description: Cuando NO se especifica docente (agregado de todos)
+ *                   properties:
+ *                     docente:
+ *                       type: array
+ *                       description: Array de IDs de docentes incluidos en la agregación
+ *                       items:
  *                         type: string
- *                         nullable: true
- *                         example: "Dominio del tema"
- *                       total_respuestas:
- *                         type: integer
- *                         example: 1
- *                       suma:
- *                         type: number
- *                         example: 2
- *                       promedio:
- *                         type: number
- *                         nullable: true
- *                         example: 2
- *                       desviacion:
- *                         type: number
- *                         nullable: true
- *                         example: 0
+ *                       example: ["79864589", "1124865039", "18125603"]
+ *                     suma_total:
+ *                       type: number
+ *                       example: 23
+ *                     total_respuestas:
+ *                       type: integer
+ *                       example: 16
+ *                     promedio:
+ *                       type: number
+ *                       nullable: true
+ *                       example: 2.875
+ *                     desviacion:
+ *                       type: number
+ *                       nullable: true
+ *                       example: 1.611
+ *                     aspectos:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           aspecto_id:
+ *                             type: integer
+ *                           nombre:
+ *                             type: string
+ *                           total_respuestas:
+ *                             type: integer
+ *                             description: Total agregado
+ *                           suma:
+ *                             type: number
+ *                             description: Suma agregada
  *       400:
  *         description: Parámetros requeridos faltantes o inválidos
  *       404:
- *         description: No hay evaluaciones para este docente/materia
+ *         description: No hay evaluaciones para los parámetros especificados
  */
 /**
  * @swagger
@@ -511,7 +537,13 @@
  * /metric/evaluations/summary/programas:
  *   get:
  *     summary: Summary metrics grouped by program and group
- *     description: Retorna métricas agregadas por programa académico y sus grupos, usando la lógica de resumen general.
+ *     description: |
+ *       Retorna métricas agregadas por programa académico y sus grupos, usando la lógica de resumen general.
+ *       
+ *       **Comportamiento con filtro de programa:**
+ *       - Si se especifica `programa`, solo se mostrarán programas que compartan al menos un semestre con el programa seleccionado.
+ *       - El programa seleccionado tendrá el campo `selected: true`.
+ *       - Los demás programas no tendrán el campo `selected` (el frontend puede tratarlo como `false`).
  *     tags: [Metric]
  *     parameters:
  *       - in: query
@@ -533,11 +565,23 @@
  *           type: string
  *         description: Filtrar por período
  *       - in: query
+ *         name: programa
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por programa académico. Si se especifica, solo muestra programas que compartan al menos un semestre.
+ *       - in: query
  *         name: semestre
  *         required: false
  *         schema:
  *           type: string
  *         description: Filtrar por semestre
+ *       - in: query
+ *         name: grupo
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por grupo
  *     responses:
  *       200:
  *         description: Métricas por programa y grupo
@@ -553,6 +597,11 @@
  *                     properties:
  *                       nombre:
  *                         type: string
+ *                         example: "Ingeniería de Sistemas"
+ *                       selected:
+ *                         type: boolean
+ *                         description: Solo presente cuando se especifica el parámetro programa y este programa coincide
+ *                         example: true
  *                       metricas:
  *                         type: object
  *                         properties:
@@ -665,66 +714,142 @@
 
 /**
  * @swagger
- * /metric/evaluations/docente/{docente}:
+ * /metric/evaluations/docentes:
  *   get:
- *     summary: Métricas generales del docente
+ *     summary: Métricas generales del docente con soporte para paginación
+ *     description: |
+ *       Retorna métricas para uno o todos los docentes.
+ *       - Si se proporciona docente, retorna métricas para ese docente específico.
+ *       - Si no, retorna lista paginada de todos los docentes con sus métricas.
  *     tags: [Metric]
  *     parameters:
- *       - in: path
+ *       - in: query
  *         name: docente
- *         required: true
  *         schema:
  *           type: string
- *         description: ID/código del docente
+ *         description: ID/código del docente (opcional). Si se omite, retorna todos con paginación.
  *       - in: query
  *         name: cfg_t
  *         required: true
  *         schema:
  *           type: integer
+ *         description: ID de la configuración de evaluación
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número de página (solo cuando docente no está especificado)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Cantidad de registros por página (solo cuando docente no está especificado)
  *       - in: query
  *         name: sede
  *         schema:
  *           type: string
+ *         description: Filtrar por sede
  *       - in: query
  *         name: periodo
  *         schema:
  *           type: string
+ *         description: Filtrar por período
  *       - in: query
  *         name: programa
  *         schema:
  *           type: string
+ *         description: Filtrar por programa académico
  *       - in: query
  *         name: semestre
  *         schema:
  *           type: string
+ *         description: Filtrar por semestre
  *       - in: query
  *         name: grupo
  *         schema:
  *           type: string
+ *         description: Filtrar por grupo
  *     responses:
  *       200:
- *         description: Métricas del docente
+ *         description: Métricas del docente o lista paginada de docentes
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 docente:
- *                   type: string
- *                 promedio_general:
- *                   type: number
- *                 desviacion_general:
- *                   type: number
- *                 total_evaluaciones:
- *                   type: integer
- *                 total_realizadas:
- *                   type: integer
- *                 total_pendientes:
- *                   type: integer
- *                 total_aspectos:
- *                   type: integer
- *                 porcentaje_cumplimiento:
- *                   type: number
- *                 suma:
- *                   type: number
+ *               oneOf:
+ *                 - type: object
+ *                   description: Cuando se especifica docente (respuesta simple)
+ *                   properties:
+ *                     docente:
+ *                       type: string
+ *                     nombre_docente:
+ *                       type: string
+ *                     promedio_general:
+ *                       type: number
+ *                     desviacion_general:
+ *                       type: number
+ *                     total_evaluaciones:
+ *                       type: integer
+ *                     total_realizadas:
+ *                       type: integer
+ *                     total_pendientes:
+ *                       type: integer
+ *                     total_evaluaciones_registradas:
+ *                       type: integer
+ *                     total_estudiantes_registrados:
+ *                       type: integer
+ *                     total_aspectos:
+ *                       type: integer
+ *                     porcentaje_cumplimiento:
+ *                       type: number
+ *                     suma:
+ *                       type: number
+ *                 - type: object
+ *                   description: Cuando no se especifica docente (respuesta paginada)
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           docente:
+ *                             type: string
+ *                           nombre_docente:
+ *                             type: string
+ *                           promedio_general:
+ *                             type: number
+ *                           desviacion_general:
+ *                             type: number
+ *                           total_evaluaciones:
+ *                             type: integer
+ *                           total_realizadas:
+ *                             type: integer
+ *                           total_pendientes:
+ *                             type: integer
+ *                           total_evaluaciones_registradas:
+ *                             type: integer
+ *                           total_estudiantes_registrados:
+ *                             type: integer
+ *                           total_aspectos:
+ *                             type: integer
+ *                           porcentaje_cumplimiento:
+ *                             type: number
+ *                           suma:
+ *                             type: number
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         page:
+ *                           type: integer
+ *                           example: 1
+ *                         limit:
+ *                           type: integer
+ *                           example: 10
+ *                         total:
+ *                           type: integer
+ *                           example: 25
+ *                         pages:
+ *                           type: integer
+ *                           example: 3
  */

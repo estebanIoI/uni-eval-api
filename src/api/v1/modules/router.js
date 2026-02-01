@@ -30,9 +30,10 @@ router.use('/a/e', aECustom, aspectoEscala);
 const { eval: evalModule } = require('./app/eval/eval.crud');
 const { evalDet } = require('./app/eval-det/eval-det.crud');
 const evalDetCustom = require('./app/eval-det/eval-det.router');
+// Montar /eval/det antes de /eval para evitar que /eval/:id capture "det"
+router.use('/eval/det', evalDetCustom, evalDet.router);
 router.use('/eval', require('../modules/app/eval/eval.router'));
 router.use('/eval', evalModule.router);
-router.use('/eval/det', evalDetCustom, evalDet.router);
 
 // Rol
 const { rol, user_rol, user_prog } = require('./auth/rol/rol.crud');

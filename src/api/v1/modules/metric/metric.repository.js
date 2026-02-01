@@ -261,16 +261,26 @@ async function getEvaluationSummary({ cfg_t, sede, periodo, programa, semestre, 
 	};
 }
 
-async function getEvaluationSummaryByProgram({ cfg_t, sede, periodo, semestre }) {
+async function getEvaluationSummaryByProgram({ cfg_t, sede, periodo, programa, semestre, grupo }) {
 	const cfgId = Number(cfg_t);
 	if (!cfgId) throw new Error('cfg_t is required');
 
-	const whereVista = buildVistaWhere({ sede, periodo, semestre });
+	const whereVista = buildVistaWhere({ sede, periodo, semestre, grupo });
 
 	const vista = await userPrisma.vista_academica_insitus.findMany({
 		where: whereVista,
-		select: { ID_ESTUDIANTE: true, ID_DOCENTE: true, COD_ASIGNATURA: true, GRUPO: true, NOM_PROGRAMA: true }
+		select: { ID_ESTUDIANTE: true, ID_DOCENTE: true, COD_ASIGNATURA: true, GRUPO: true, NOM_PROGRAMA: true, SEMESTRE: true }
 	});
+
+	// Si se especificó un programa, obtener los semestres de ese programa
+	let semestresDelProgramaSeleccionado = new Set();
+	if (programa) {
+		for (const v of vista) {
+			if (v.NOM_PROGRAMA === programa && v.SEMESTRE) {
+				semestresDelProgramaSeleccionado.add(v.SEMESTRE);
+			}
+		}
+	}
 
 	const byPrograma = new Map();
 	for (const v of vista) {
@@ -282,6 +292,13 @@ async function getEvaluationSummaryByProgram({ cfg_t, sede, periodo, semestre })
 
 	const programas = [];
 	for (const [nombre, rows] of byPrograma.entries()) {
+		// Si se especificó un programa, filtrar solo programas que compartan al menos un semestre
+		if (programa && semestresDelProgramaSeleccionado.size > 0) {
+			const semestresDeEsteProg = new Set(rows.map(r => r.SEMESTRE).filter(Boolean));
+			const hayInterseccion = Array.from(semestresDeEsteProg).some(s => semestresDelProgramaSeleccionado.has(s));
+			if (!hayInterseccion) continue;
+		}
+
 		const metricas = await computeEvaluationMetricsFromVista(rows, cfgId);
 
 		const byGrupo = new Map();
@@ -298,23 +315,81 @@ async function getEvaluationSummaryByProgram({ cfg_t, sede, periodo, semestre })
 			grupos.push({ grupo, metricas: metricasGrupo });
 		}
 
-		programas.push({ nombre, metricas, grupos });
+		const programaObj = { nombre, metricas, grupos };
+		// Marcar el programa seleccionado
+		if (programa && nombre === programa) {
+			programaObj.selected = true;
+		}
+		programas.push(programaObj);
 	}
 
 	return { programas };
 }
 
-async function getDocenteStats({ cfg_t, docente, sede, periodo, programa, semestre, grupo }) {
+async function getAllDocentesStats({ cfg_t, sede, periodo, programa, semestre, grupo, page = 1, limit = 10 }) {
 	const cfgId = Number(cfg_t);
 	if (!cfgId) throw new Error('cfg_t is required');
-	if (!docente) throw new Error('docente is required');
+
+	const whereVista = buildVistaWhere({ sede, periodo, programa, semestre, grupo });
+
+	const vista = await userPrisma.vista_academica_insitus.findMany({
+		where: whereVista,
+		select: { ID_ESTUDIANTE: true, COD_ASIGNATURA: true, GRUPO: true, DOCENTE: true, ID_DOCENTE: true }
+	});
+
+	// Group by docente
+	const byDocente = new Map();
+	for (const v of vista) {
+		if (!v.ID_DOCENTE) continue;
+		if (!byDocente.has(v.ID_DOCENTE)) {
+			byDocente.set(v.ID_DOCENTE, { rows: [], nombre: v.DOCENTE });
+		}
+		byDocente.get(v.ID_DOCENTE).rows.push(v);
+	}
+
+	const docenteIds = Array.from(byDocente.keys());
+	const total = docenteIds.length;
+	const skip = (page - 1) * limit;
+	const paginatedIds = docenteIds.slice(skip, skip + limit);
+
+	const results = [];
+	for (const docenteId of paginatedIds) {
+		const stats = await getDocenteStats({
+			cfg_t,
+			docente: docenteId,
+			sede,
+			periodo,
+			programa,
+			semestre,
+			grupo
+		});
+		results.push(stats);
+	}
+
+	return {
+		data: results,
+		pagination: {
+			page,
+			limit,
+			total,
+			pages: Math.ceil(total / limit)
+		}
+	};
+}
+
+async function getDocenteStats({ cfg_t, docente, sede, periodo, programa, semestre, grupo, page = 1, limit = 10 }) {
+	const cfgId = Number(cfg_t);
+	if (!cfgId) throw new Error('cfg_t is required');
+	if (!docente) {
+		return getAllDocentesStats({ cfg_t, sede, periodo, programa, semestre, grupo, page, limit });
+	}
 
 	const whereVista = buildVistaWhere({ sede, periodo, programa, semestre, grupo });
 	whereVista.ID_DOCENTE = docente;
 
 	const vista = await userPrisma.vista_academica_insitus.findMany({
 		where: whereVista,
-		select: { ID_ESTUDIANTE: true, COD_ASIGNATURA: true, GRUPO: true }
+		select: { ID_ESTUDIANTE: true, COD_ASIGNATURA: true, GRUPO: true, DOCENTE: true }
 	});
 	const estudiantesSet = new Set(vista.map(v => v.ID_ESTUDIANTE).filter(Boolean));
 
@@ -323,16 +398,23 @@ async function getDocenteStats({ cfg_t, docente, sede, periodo, programa, semest
 		.filter(v => v.ID_ESTUDIANTE)
 		.map(v => `${v.ID_ESTUDIANTE}::${docente}::${v.COD_ASIGNATURA}::${v.GRUPO}`);
 
+	const evalWhere = {
+		id_configuracion: cfgId,
+		docente,
+		estudiante: { in: Array.from(estudiantesSet) }
+	};
 	const evals = await localPrisma.eval.findMany({
-		where: { id_configuracion: cfgId, docente },
+		where: evalWhere,
 		select: { id: true, estudiante: true, docente: true, codigo_materia: true }
 	});
 	const evalIds = evals.map(e => e.id);
 
-	const detalles = await localPrisma.eval_det.findMany({
-		where: { eval_id: { in: evalIds } },
-		select: { eval_id: true, a_e_id: true }
-	});
+	const detalles = evalIds.length
+		? await localPrisma.eval_det.findMany({
+				where: { eval_id: { in: evalIds } },
+				select: { eval_id: true, a_e_id: true }
+			})
+		: [];
 
 	// Count aspects answered
 	const totalAspectos = new Set(detalles.map(d => d.a_e_id)).size;
@@ -342,13 +424,10 @@ async function getDocenteStats({ cfg_t, docente, sede, periodo, programa, semest
 	const totalRealizadas = evals.filter(e => evalsWithResponses.has(e.id)).length;
 
 	// Registradas: all local eval records for cfg + docente (regardless of answers)
-	const totalRegistradas = await localPrisma.eval.count({ where: { id_configuracion: cfgId, docente } });
+	const totalRegistradas = evals.length;
 
 	// Estudiantes registrados: unique estudiantes with at least one local eval for cfg + docente
-	const totalEstudiantesRegistrados = (await localPrisma.eval.findMany({
-		where: { id_configuracion: cfgId, docente },
-		select: { estudiante: true }
-	})).reduce((set, e) => {
+	const totalEstudiantesRegistrados = evals.reduce((set, e) => {
 		if (e.estudiante) set.add(e.estudiante);
 		return set;
 	}, new Set()).size;
@@ -403,8 +482,11 @@ async function getDocenteStats({ cfg_t, docente, sede, periodo, programa, semest
 	const porcentajeCumplimiento = totalEvaluaciones ? (totalRealizadas / totalEvaluaciones) * 100 : 0;
 	const totalPendientes = Math.max(totalEvaluaciones - totalRealizadas, 0);
 
+	const nombreDocente = vista.length > 0 ? vista[0].DOCENTE : null;
+
 	return {
 		docente,
+		nombre_docente: nombreDocente,
 		promedio_general: promedioGeneral,
 		desviacion_general: desviacionGeneral,
 		total_evaluaciones: totalEvaluaciones,
@@ -425,12 +507,12 @@ async function getRanking({ cfg_t, sede, periodo, programa, semestre, grupo }) {
 
 	const vista = await userPrisma.vista_academica_insitus.findMany({
 		where: whereVista,
-		select: { ID_DOCENTE: true, ID_ESTUDIANTE: true }
+		select: { ID_DOCENTE: true, ID_ESTUDIANTE: true, DOCENTE: true }
 	});
 	const byDocente = new Map();
 	for (const v of vista) {
 		if (!v.ID_DOCENTE) continue;
-		const entry = byDocente.get(v.ID_DOCENTE) || { students: new Set() };
+		const entry = byDocente.get(v.ID_DOCENTE) || { students: new Set(), nombre: v.DOCENTE };
 		entry.students.add(v.ID_ESTUDIANTE);
 		byDocente.set(v.ID_DOCENTE, entry);
 	}
@@ -465,7 +547,7 @@ async function getRanking({ cfg_t, sede, periodo, programa, semestre, grupo }) {
 		}
 		const v = evalIds.length; // number of evaluations completed for docente
 		const bayesian = avg == null ? 0 : (v / (v + m)) * avg + (m / (v + m)) * globalAvg;
-		results.push({ docente, avg: avg ?? 0, adjusted: bayesian, realizados: v, universo: info.students.size });
+		results.push({ docente, nombre_docente: info.nombre || null, avg: avg ?? 0, adjusted: bayesian, realizados: v, universo: info.students.size });
 	}
 
 	results.sort((a, b) => b.adjusted - a.adjusted);
@@ -475,109 +557,287 @@ async function getRanking({ cfg_t, sede, periodo, programa, semestre, grupo }) {
 async function getDocenteAspectMetrics({ cfg_t, docente, codigo_materia, sede, periodo, programa, semestre, grupo }) {
 	const cfgId = Number(cfg_t);
 	if (!cfgId) throw new Error('cfg_t is required');
-	if (!docente) throw new Error('docente is required');
 
-	// Filter evals for this docente
-	const whereClause = { id_configuracion: cfgId, docente };
-	if (codigo_materia) {
-		whereClause.codigo_materia = String(codigo_materia);
-	}
-	const evals = await localPrisma.eval.findMany({
-		where: whereClause,
-		select: { id: true }
-	});
-	const evalIds = evals.map(e => e.id);
-	if (!evalIds.length) return { docente, codigo_materia: codigo_materia ? String(codigo_materia) : null, aspectos: [] };
-
-	// Get all responses with aspect IDs
-	const detalles = await localPrisma.eval_det.findMany({
-		where: { eval_id: { in: evalIds } },
-		select: { a_e_id: true }
-	});
-	const aeIds = Array.from(new Set(detalles.map(d => d.a_e_id)));
-	if (!aeIds.length) return { docente, codigo_materia: codigo_materia ? String(codigo_materia) : null, aspectos: [] };
-
-	// Map a_e -> aspecto_id and escala_id
-	const aeRecords = await localPrisma.a_e.findMany({
-		where: { id: { in: aeIds } },
-		select: { id: true, aspecto_id: true, escala_id: true }
-	});
-	const aspectoByAe = new Map(aeRecords.map(r => [r.id, r.aspecto_id]));
-	const escalaByAe = new Map(aeRecords.map(r => [r.id, r.escala_id]));
-
-	// Load puntajes for all scales
-	const escalaIds = Array.from(new Set(aeRecords.map(r => r.escala_id).filter(Boolean)));
-	const cfgE = await localPrisma.cfg_e.findMany({
-		where: { cfg_t_id: cfgId, escala_id: { in: escalaIds } },
-		select: { escala_id: true, puntaje: true }
-	});
-	const puntajeByEscala = new Map(cfgE.map(c => [c.escala_id, Number(c.puntaje)]));
-
-	// Aggregate per aspecto
-	const agg = new Map();
-	for (const d of detalles) {
-		const asp = aspectoByAe.get(d.a_e_id);
-		if (!asp) continue;
-		const escala = escalaByAe.get(d.a_e_id);
-		const puntaje = escala ? puntajeByEscala.get(escala) : undefined;
-		const entry = agg.get(asp) || { aspecto_id: asp, count: 0, sum: 0, scores: [] };
-		entry.count += 1;
-		if (typeof puntaje === 'number') {
-			entry.sum += puntaje;
-			entry.scores.push(puntaje);
+	// Helper function to compute metrics for a single docente
+	const computeMetricsForDocente = async (docenteId) => {
+		// Filter evals for this docente
+		const whereClause = { id_configuracion: cfgId, docente: docenteId };
+		if (codigo_materia) {
+			whereClause.codigo_materia = String(codigo_materia);
 		}
-		agg.set(asp, entry);
+		const evals = await localPrisma.eval.findMany({
+			where: whereClause,
+			select: { id: true }
+		});
+		const evalIds = evals.map(e => e.id);
+
+		// Get all responses with aspect IDs
+		const detalles = evalIds.length ? await localPrisma.eval_det.findMany({
+			where: { eval_id: { in: evalIds } },
+			select: { a_e_id: true }
+		}) : [];
+		const aeIds = Array.from(new Set(detalles.map(d => d.a_e_id)));
+
+		// If no data, return null to filter out
+		if (!aeIds.length) return null;
+
+		// Map a_e -> aspecto_id and escala_id
+		const aeRecords = await localPrisma.a_e.findMany({
+			where: { id: { in: aeIds } },
+			select: { id: true, aspecto_id: true, escala_id: true }
+		});
+		const aspectoByAe = new Map(aeRecords.map(r => [r.id, r.aspecto_id]));
+		const escalaByAe = new Map(aeRecords.map(r => [r.id, r.escala_id]));
+
+		// Load puntajes for all scales
+		const escalaIds = Array.from(new Set(aeRecords.map(r => r.escala_id).filter(Boolean)));
+		const cfgE = await localPrisma.cfg_e.findMany({
+			where: { cfg_t_id: cfgId, escala_id: { in: escalaIds } },
+			select: { escala_id: true, puntaje: true }
+		});
+		const puntajeByEscala = new Map(cfgE.map(c => [c.escala_id, Number(c.puntaje)]));
+
+		// Aggregate per aspecto
+		const agg = new Map();
+		for (const d of detalles) {
+			const asp = aspectoByAe.get(d.a_e_id);
+			if (!asp) continue;
+			const escala = escalaByAe.get(d.a_e_id);
+			const puntaje = escala ? puntajeByEscala.get(escala) : undefined;
+			const entry = agg.get(asp) || { aspecto_id: asp, count: 0, sum: 0, scores: [] };
+			entry.count += 1;
+			if (typeof puntaje === 'number') {
+				entry.sum += puntaje;
+				entry.scores.push(puntaje);
+			}
+			agg.set(asp, entry);
+		}
+
+		const aspectos = [];
+		let sumaTotal = 0;
+		let totalRespuestas = detalles.length;
+		const aspectAverages = [];
+		for (const entry of agg.values()) {
+			const avg = entry.scores.length ? entry.sum / entry.scores.length : null;
+			let std = null;
+			if (entry.scores.length) {
+				const mean = avg;
+				std = Math.sqrt(entry.scores.reduce((acc, s) => acc + Math.pow(s - mean, 2), 0) / entry.scores.length);
+			}
+			sumaTotal += entry.sum;
+			if (avg != null) {
+				aspectAverages.push(avg);
+			}
+			const item = {
+				aspecto_id: entry.aspecto_id,
+				total_respuestas: entry.count,
+				suma: entry.sum
+			};
+			if (avg == null) {
+				item.promedio = null;
+				item.desviacion = null;
+			}
+			aspectos.push(item);
+		}
+
+		// Join aspecto names
+		const aspectoIds = aspectos.map(a => a.aspecto_id);
+		if (aspectoIds.length) {
+			const aspectosInfo = await localPrisma.aspecto.findMany({ where: { id: { in: aspectoIds } }, select: { id: true, nombre: true } });
+			const nameById = new Map(aspectosInfo.map(a => [a.id, a.nombre]));
+			for (const a of aspectos) a.nombre = nameById.get(a.aspecto_id) || null;
+		}
+
+		let promedio = null;
+		let desviacion = null;
+		const numScoredAspects = aspectAverages.length;
+		if (numScoredAspects > 0) {
+			promedio = sumaTotal / numScoredAspects;
+			const mean = promedio;
+			const variance = aspectAverages.reduce((acc, a) => acc + Math.pow(a - mean, 2), 0) / numScoredAspects;
+			desviacion = Math.sqrt(variance);
+		}
+
+		return { docenteId, suma_total: sumaTotal, total_respuestas: totalRespuestas, promedio, desviacion, aspectos };
+	};
+
+	// If docente is provided, return metrics for single docente
+	if (docente) {
+		const whereClause = { id_configuracion: cfgId, docente };
+		if (codigo_materia) {
+			whereClause.codigo_materia = String(codigo_materia);
+		}
+		const evals = await localPrisma.eval.findMany({
+			where: whereClause,
+			select: { id: true }
+		});
+		const evalIds = evals.map(e => e.id);
+		if (!evalIds.length) return { docente, codigo_materia: codigo_materia ? String(codigo_materia) : null, aspectos: [] };
+
+		const detalles = await localPrisma.eval_det.findMany({
+			where: { eval_id: { in: evalIds } },
+			select: { a_e_id: true }
+		});
+		const aeIds = Array.from(new Set(detalles.map(d => d.a_e_id)));
+		if (!aeIds.length) return { docente, codigo_materia: codigo_materia ? String(codigo_materia) : null, aspectos: [] };
+
+		const aeRecords = await localPrisma.a_e.findMany({
+			where: { id: { in: aeIds } },
+			select: { id: true, aspecto_id: true, escala_id: true }
+		});
+		const aspectoByAe = new Map(aeRecords.map(r => [r.id, r.aspecto_id]));
+		const escalaByAe = new Map(aeRecords.map(r => [r.id, r.escala_id]));
+
+		const escalaIds = Array.from(new Set(aeRecords.map(r => r.escala_id).filter(Boolean)));
+		const cfgE = await localPrisma.cfg_e.findMany({
+			where: { cfg_t_id: cfgId, escala_id: { in: escalaIds } },
+			select: { escala_id: true, puntaje: true }
+		});
+		const puntajeByEscala = new Map(cfgE.map(c => [c.escala_id, Number(c.puntaje)]));
+
+		const agg = new Map();
+		for (const d of detalles) {
+			const asp = aspectoByAe.get(d.a_e_id);
+			if (!asp) continue;
+			const escala = escalaByAe.get(d.a_e_id);
+			const puntaje = escala ? puntajeByEscala.get(escala) : undefined;
+			const entry = agg.get(asp) || { aspecto_id: asp, count: 0, sum: 0, scores: [] };
+			entry.count += 1;
+			if (typeof puntaje === 'number') {
+				entry.sum += puntaje;
+				entry.scores.push(puntaje);
+			}
+			agg.set(asp, entry);
+		}
+
+		const aspectos = [];
+		let sumaTotal = 0;
+		let totalRespuestas = detalles.length;
+		const aspectAverages = [];
+		for (const entry of agg.values()) {
+			const avg = entry.scores.length ? entry.sum / entry.scores.length : null;
+			let std = null;
+			if (entry.scores.length) {
+				const mean = avg;
+				std = Math.sqrt(entry.scores.reduce((acc, s) => acc + Math.pow(s - mean, 2), 0) / entry.scores.length);
+			}
+			sumaTotal += entry.sum;
+			if (avg != null) {
+				aspectAverages.push(avg);
+			}
+			const item = {
+				aspecto_id: entry.aspecto_id,
+				total_respuestas: entry.count,
+				suma: entry.sum
+			};
+			if (avg == null) {
+				item.promedio = null;
+				item.desviacion = null;
+			}
+			aspectos.push(item);
+		}
+
+		const aspectoIds = aspectos.map(a => a.aspecto_id);
+		if (aspectoIds.length) {
+			const aspectosInfo = await localPrisma.aspecto.findMany({ where: { id: { in: aspectoIds } }, select: { id: true, nombre: true } });
+			const nameById = new Map(aspectosInfo.map(a => [a.id, a.nombre]));
+			for (const a of aspectos) a.nombre = nameById.get(a.aspecto_id) || null;
+		}
+
+		let promedio = null;
+		let desviacion = null;
+		const numScoredAspects = aspectAverages.length;
+		if (numScoredAspects > 0) {
+			promedio = sumaTotal / numScoredAspects;
+			const mean = promedio;
+			const variance = aspectAverages.reduce((acc, a) => acc + Math.pow(a - mean, 2), 0) / numScoredAspects;
+			desviacion = Math.sqrt(variance);
+		}
+
+		const result = { docente, suma_total: sumaTotal, total_respuestas: totalRespuestas, promedio, desviacion, aspectos };
+		if (codigo_materia) result.codigo_materia = String(codigo_materia);
+		return result;
 	}
 
-	const aspectos = [];
-	let sumaTotal = 0;
-	let totalRespuestas = detalles.length; // includes open questions
+	// If docente is not provided, aggregate metrics from all docentes
+  // Apply filters to get the filtered universe of docentes
+  let docentesList = [];
+  const hasFilters = Boolean(sede || periodo || programa || semestre || grupo);
+
+  if (hasFilters) {
+    // Use vista_academica_insitus to get filtered docentes
+    const whereVista = buildVistaWhere({ sede, periodo, programa, semestre, grupo });
+    const vista = await userPrisma.vista_academica_insitus.findMany({
+      where: whereVista,
+      select: { ID_DOCENTE: true },
+      distinct: ['ID_DOCENTE']
+    });
+    docentesList = Array.from(new Set(vista.map(v => v.ID_DOCENTE).filter(Boolean)));
+  } else {
+    // No filters, get all docentes
+    const allDocentesEvals = await localPrisma.eval.findMany({
+      where: { id_configuracion: cfgId },
+      select: { docente: true },
+      distinct: ['docente']
+    });
+    docentesList = Array.from(new Set(allDocentesEvals.map(e => e.docente).filter(Boolean)));
+  }
+	// Compute metrics for each docente
+	const resultsByDocente = [];
+	for (const doc of docentesList) {
+		const metrics = await computeMetricsForDocente(doc);
+		if (metrics) resultsByDocente.push(metrics);
+	}
+
+	// Aggregate all metrics into a single response
+	const docentes = resultsByDocente.map(r => r.docenteId);
+	let agregadoSumaTotal = 0;
+	let agregadoTotalRespuestas = 0;
+	const agregadoAspectos = new Map();
 	const aspectAverages = [];
-	for (const entry of agg.values()) {
-		const avg = entry.scores.length ? entry.sum / entry.scores.length : null;
-		let std = null;
-		if (entry.scores.length) {
-			const mean = avg;
-			std = Math.sqrt(entry.scores.reduce((acc, s) => acc + Math.pow(s - mean, 2), 0) / entry.scores.length);
+
+	for (const result of resultsByDocente) {
+		agregadoSumaTotal += result.suma_total;
+		agregadoTotalRespuestas += result.total_respuestas;
+		if (result.promedio != null) {
+			aspectAverages.push(result.promedio);
 		}
-		sumaTotal += entry.sum;
-		if (avg != null) {
-			aspectAverages.push(avg);
+
+		for (const asp of result.aspectos) {
+			const key = asp.aspecto_id;
+			if (!agregadoAspectos.has(key)) {
+				agregadoAspectos.set(key, {
+					aspecto_id: key,
+					nombre: asp.nombre,
+					total_respuestas: 0,
+					suma: 0
+				});
+			}
+			const entry = agregadoAspectos.get(key);
+			entry.total_respuestas += asp.total_respuestas;
+			entry.suma += asp.suma;
 		}
-		const item = {
-			aspecto_id: entry.aspecto_id,
-			total_respuestas: entry.count,
-			suma: entry.sum
-		};
-		// Only include promedio/desviacion when they are null (open questions with no scale)
-		// For closed questions (scored), omit promedio/desviacion to match desired response shape
-		if (avg == null) {
-			item.promedio = null;
-			item.desviacion = null;
-		}
-		aspectos.push(item);
 	}
 
-	// Optional: join aspecto names
-	const aspectoIds = aspectos.map(a => a.aspecto_id);
-	if (aspectoIds.length) {
-		const aspectosInfo = await localPrisma.aspecto.findMany({ where: { id: { in: aspectoIds } }, select: { id: true, nombre: true } });
-		const nameById = new Map(aspectosInfo.map(a => [a.id, a.nombre]));
-		for (const a of aspectos) a.nombre = nameById.get(a.aspecto_id) || null;
+	let agregadoPromedio = null;
+	let agregadoDesviacion = null;
+	if (aspectAverages.length > 0) {
+		agregadoPromedio = agregadoSumaTotal / aspectAverages.length;
+		const mean = agregadoPromedio;
+		const variance = aspectAverages.reduce((acc, a) => acc + Math.pow(a - mean, 2), 0) / aspectAverages.length;
+		agregadoDesviacion = Math.sqrt(variance);
 	}
 
-	// Global promedio = suma_total / total de aspectos con escala (scored aspects)
-	let promedio = null;
-	let desviacion = null;
-	const numScoredAspects = aspectAverages.length;
-	if (numScoredAspects > 0) {
-		promedio = sumaTotal / numScoredAspects;
-		const mean = promedio;
-		const variance = aspectAverages.reduce((acc, a) => acc + Math.pow(a - mean, 2), 0) / numScoredAspects;
-		desviacion = Math.sqrt(variance);
-	}
+	const aspectosFinales = Array.from(agregadoAspectos.values());
 
-	return { docente, codigo_materia: codigo_materia ? String(codigo_materia) : null, suma_total: sumaTotal, total_respuestas: totalRespuestas, promedio, desviacion, aspectos };
+	return {
+		docente: docentes,
+		suma_total: agregadoSumaTotal,
+		total_respuestas: agregadoTotalRespuestas,
+		promedio: agregadoPromedio,
+		desviacion: agregadoDesviacion,
+		aspectos: aspectosFinales
+	};
 }
 
 async function getDocenteMateriaMetrics({ cfg_t, docente, codigo_materia, sede, periodo, programa, semestre, grupo }) {
@@ -597,21 +857,30 @@ async function getDocenteMateriaMetrics({ cfg_t, docente, codigo_materia, sede, 
 	}
 	const cursos = await userPrisma.vista_academica_insitus.findMany({
 		where: whereVista,
-		select: { COD_ASIGNATURA: true, ASIGNATURA: true, ID_ESTUDIANTE: true }
+		select: { COD_ASIGNATURA: true, ASIGNATURA: true, ID_ESTUDIANTE: true, DOCENTE: true, GRUPO: true }
 	});
 	if (!cursos.length) return { docente, materias: [] };
 
-	// Group by subject
+	const nombreDocente = cursos.length > 0 ? cursos[0].DOCENTE : null;
+
+	// Group by subject, then by grupo
 	const byMateria = new Map();
 	for (const c of cursos) {
 		const key = String(c.COD_ASIGNATURA);
-		const entry = byMateria.get(key) || { codigo: key, nombre: c.ASIGNATURA || null, estudiantes: new Set() };
+		const entry = byMateria.get(key) || { codigo: key, nombre: c.ASIGNATURA || null, estudiantes: new Set(), byGrupo: new Map() };
 		if (c.ID_ESTUDIANTE) entry.estudiantes.add(c.ID_ESTUDIANTE);
+		
+		// Group by grupo within materia
+		const grupoKey = c.GRUPO || 'SIN_GRUPO';
+		const grupoEntry = entry.byGrupo.get(grupoKey) || { grupo: grupoKey, estudiantes: new Set() };
+		if (c.ID_ESTUDIANTE) grupoEntry.estudiantes.add(c.ID_ESTUDIANTE);
+		entry.byGrupo.set(grupoKey, grupoEntry);
+		
 		byMateria.set(key, entry);
 	}
 
 	const materias = [];
-	for (const { codigo, nombre, estudiantes } of byMateria.values()) {
+	for (const { codigo, nombre, estudiantes, byGrupo } of byMateria.values()) {
 		// evals for docente + materia
 		const evals = await localPrisma.eval.findMany({
 			where: { id_configuracion: cfgId, docente, codigo_materia: codigo },
@@ -665,7 +934,79 @@ async function getDocenteMateriaMetrics({ cfg_t, docente, codigo_materia, sede, 
 			return set;
 		}, new Set()).size;
 
-		materias.push({
+		// Calculate metrics per grupo
+		const grupos = [];
+		for (const { grupo, estudiantes: grupoEstudiantes } of byGrupo.values()) {
+			const grupoEvalsIds = evals.filter(e => grupoEstudiantes.has(e.estudiante)).map(e => e.id);
+			const grupoDetalles = grupoEvalsIds.length ? detalles.filter(d => {
+				const evalWithDetail = evals.find(e => e.id === d.eval_id);
+				return evalWithDetail && grupoEstudiantes.has(evalWithDetail.estudiante);
+			}) : [];
+			
+			const grupoEvalsWithResponses = new Set(grupoDetalles.map(d => d.eval_id));
+			const grupoTotalRealizadas = grupoEvalsIds.filter(id => grupoEvalsWithResponses.has(id)).length;
+
+			const grupoAeIds = Array.from(new Set(grupoDetalles.map(d => d.a_e_id)));
+			let grupoSuma = 0;
+			let grupoPromedioGeneral = null;
+			let grupoDesviacionGeneral = null;
+			let grupoTotalAspectos = grupoAeIds.length;
+			
+			if (grupoAeIds.length && aeIds.length) {
+				const grupoScores = [];
+				const aeRecords = await localPrisma.a_e.findMany({ where: { id: { in: aeIds } }, select: { id: true, escala_id: true } });
+				const escalaByAe = new Map(aeRecords.map(r => [r.id, r.escala_id]));
+				const escalaIds = Array.from(new Set(aeRecords.map(r => r.escala_id).filter(Boolean)));
+				const cfgE = await localPrisma.cfg_e.findMany({ where: { cfg_t_id: cfgId, escala_id: { in: escalaIds } }, select: { escala_id: true, puntaje: true } });
+				const puntajeByEscala = new Map(cfgE.map(c => [c.escala_id, Number(c.puntaje)]));
+				
+				for (const d of grupoDetalles) {
+					const esc = escalaByAe.get(d.a_e_id);
+					const val = esc ? puntajeByEscala.get(esc) : undefined;
+					if (typeof val === 'number') {
+						grupoSuma += val;
+						grupoScores.push(val);
+					}
+				}
+				if (grupoScores.length) {
+					const sum = grupoScores.reduce((a, b) => a + b, 0);
+					grupoPromedioGeneral = sum / grupoScores.length;
+					const mean = grupoPromedioGeneral;
+					const variance = grupoScores.reduce((acc, s) => acc + Math.pow(s - mean, 2), 0) / grupoScores.length;
+					grupoDesviacionGeneral = Math.sqrt(variance);
+				}
+			}
+
+			const grupoTotalEvaluaciones = grupoEstudiantes.size;
+			const grupoTotalPendientes = Math.max(grupoTotalEvaluaciones - grupoTotalRealizadas, 0);
+			const grupoPorcentajeCumplimiento = grupoTotalEvaluaciones ? (grupoTotalRealizadas / grupoTotalEvaluaciones) * 100 : 0;
+			const grupoTotalEvaluacionesRegistradas = await localPrisma.eval.count({ 
+				where: { id_configuracion: cfgId, docente, codigo_materia: codigo } 
+			});
+			const grupoTotalEstudiantesRegistrados = (await localPrisma.eval.findMany({
+				where: { id_configuracion: cfgId, docente, codigo_materia: codigo },
+				select: { estudiante: true }
+			})).filter(e => grupoEstudiantes.has(e.estudiante)).reduce((set, e) => {
+				if (e.estudiante) set.add(e.estudiante);
+				return set;
+			}, new Set()).size;
+
+			grupos.push({
+				grupo,
+				total_evaluaciones: grupoTotalEvaluaciones,
+				total_realizadas: grupoTotalRealizadas,
+				total_pendientes: grupoTotalPendientes,
+				suma: grupoSuma,
+				promedio_general: grupoPromedioGeneral,
+				desviacion_general: grupoDesviacionGeneral,
+				total_evaluaciones_registradas: grupoTotalEvaluacionesRegistradas,
+				total_estudiantes_registrados: grupoTotalEstudiantesRegistrados,
+				total_aspectos: grupoTotalAspectos,
+				porcentaje_cumplimiento: grupoPorcentajeCumplimiento
+			});
+		}
+
+		const materiaObj = {
 			codigo_materia: codigo,
 			nombre_materia: nombre,
 			total_evaluaciones: totalEvaluaciones,
@@ -678,10 +1019,20 @@ async function getDocenteMateriaMetrics({ cfg_t, docente, codigo_materia, sede, 
 			total_estudiantes_registrados: totalEstudiantesRegistrados,
 			total_aspectos: totalAspectos,
 			porcentaje_cumplimiento: porcentajeCumplimiento
-		});
+		};
+
+		// Si hay solo un grupo, mostrar solo el nombre del grupo como string
+		// Si hay más de 1 grupo, crear el array con todos los detalles
+		if (grupos.length === 1) {
+			materiaObj.grupo = grupos[0].grupo;
+		} else if (grupos.length > 1) {
+			materiaObj.grupos = grupos;
+		}
+
+		materias.push(materiaObj);
 	}
 
-	return { docente, materias };
+	return { docente, nombre_docente: nombreDocente, materias };
 }
 
 async function getDocenteMateriaCompletion({ cfg_t, docente, codigo_materia, sede, periodo, programa, semestre, grupo }) {
@@ -699,7 +1050,7 @@ async function getDocenteMateriaCompletion({ cfg_t, docente, codigo_materia, sed
 
 	const vista = await userPrisma.vista_academica_insitus.findMany({
 		where: whereVista,
-		select: { ID_ESTUDIANTE: true, PRIMER_APELLIDO: true, SEGUNDO_APELLIDO: true, PRIMER_NOMBRE: true, SEGUNDO_NOMBRE: true, GRUPO: true }
+		select: { ID_ESTUDIANTE: true, PRIMER_APELLIDO: true, SEGUNDO_APELLIDO: true, PRIMER_NOMBRE: true, SEGUNDO_NOMBRE: true, GRUPO: true, DOCENTE: true }
 	});
 
 	// Group students by GRUPO
@@ -738,7 +1089,9 @@ async function getDocenteMateriaCompletion({ cfg_t, docente, codigo_materia, sed
 		grupos.push({ grupo, completados, pendientes });
 	}
 
-	return { docente, codigo_materia: String(codigo_materia), grupos };
+	const nombreDocente = vista.length > 0 ? vista[0].DOCENTE : null;
+
+	return { docente, nombre_docente: nombreDocente, codigo_materia: String(codigo_materia), grupos };
 }
 
 // Aspect metrics for a docente within a specific subject (codigo_materia)
@@ -1020,6 +1373,7 @@ module.exports = {
 	getEvaluationSummary,
 	getEvaluationSummaryByProgram,
 	getDocenteStats,
+	getAllDocentesStats,
 	getRanking,
 	getDocenteAspectMetrics,
 	getDocenteMateriaMetrics,
