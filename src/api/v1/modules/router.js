@@ -36,10 +36,12 @@ router.use('/eval', require('../modules/app/eval/eval.router'));
 router.use('/eval', evalModule.router);
 
 // Rol
-const { rol, user_rol, user_prog } = require('./auth/rol/rol.crud');
+const { rol, user_rol, prog, user_prog } = require('./auth/rol/rol.crud');
 const rolCustomRouter = require('./auth/rol/rol.router');
+const userRolCustomRouter = require('./auth/rol/user-rol/user-rol.router');
 router.use('/rol', rolCustomRouter, rol.router);
-router.use('/user/rol', user_rol.router);
+router.use('/user/rol', userRolCustomRouter, user_rol.router);
+router.use('/prog', prog.router);
 router.use('/user/prog', user_prog.router);
 
 // Bulk configuration routes (cfg_a/cfg_e)

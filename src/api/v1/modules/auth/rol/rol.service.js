@@ -1,9 +1,12 @@
+const AppError = require('@utils/AppError');
+const MESSAGES = require('@constants/messages');
+
 class RolService {
 	constructor(repository) {
 		this.repository = repository;
 	}
 
-	async getMixedRoles() {
+	async getMixedRolesOnline() {
 		const [localRoles, remoteRoles] = await Promise.all([
 			this.repository.getLocalRoles(),
 			this.repository.getRemoteRolesDistinct()
@@ -22,6 +25,10 @@ class RolService {
 		}));
 
 		return [...locals, ...remotes];
+	}
+
+	async getMixedRoles() {
+		return this.repository.getMixedLocalRoles();
 	}
 }
 

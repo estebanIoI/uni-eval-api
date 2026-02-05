@@ -34,6 +34,15 @@ function requireAuthorization(cfgSelector = null) {
         return next();
       }
 
+      // Si el usuario tiene rol 2 en auth O rol 2 en app (docente/director), omite validación
+      const authRoleIds = new Set((req.user?.rolesAuthIds || []).map(String));
+      const appRoleIds = new Set((req.user?.rolesAppIds || []).map(String));
+      
+      if (authRoleIds.has('2') || appRoleIds.has('2')) {
+        req.authorized = { timestamp: new Date(), cfgTId: null, role2Bypass: true };
+        return next();
+      }
+
       const cfgTId = typeof cfgSelector === 'function' ? cfgSelector(req) : cfgSelector ?? null;
       const ok = await isUserAuthorized(req.user, cfgTId);
 

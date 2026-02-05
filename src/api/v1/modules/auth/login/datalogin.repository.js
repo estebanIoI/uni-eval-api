@@ -45,6 +45,34 @@ class DataloginRepository {
     return roles;
   }
 
+  // Get programs for a user through user_rol -> user_prog -> prog
+  async findProgramsByUserId(user_id) {
+    const userRoles = await localPrisma.user_rol.findMany({
+      where: { user_id },
+      include: {
+        user_prog: {
+          include: {
+            prog: true
+          }
+        }
+      }
+    });
+
+    const seenProgs = new Map();
+
+    for (const userRole of userRoles) {
+      if (!userRole.user_prog) continue;
+      for (const userProg of userRole.user_prog) {
+        const prog = userProg?.prog;
+        if (!prog?.id || !prog?.nombre) continue;
+        if (seenProgs.has(prog.id)) continue;
+        seenProgs.set(prog.id, { id: prog.id, nombre: prog.nombre });
+      }
+    }
+
+    return Array.from(seenProgs.values());
+  }
+
   // ---- Refresh token helpers ----
   hashToken(token) {
     return crypto.createHash('sha256').update(token).digest('hex');

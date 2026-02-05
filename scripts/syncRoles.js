@@ -11,7 +11,7 @@ async function fetchRolesMix() {
   const repository = new RolRepository();
   const service = new RolService(repository);
   
-  const roles = await service.getMixedRoles();
+  const roles = await service.getMixedRolesOnline();
   
   if (!Array.isArray(roles)) {
     throw new Error('El servicio no retornó un array válido');

@@ -20,6 +20,20 @@ class RolRepository {
 			orderBy: { user_idrole: 'asc' }
 		});
 	}
+
+	getMixedLocalRoles() {
+		return this.localClient.rol_mix.findMany({
+			select: { id: true, nombre: true, origen: true, rol_origen_id: true },
+			orderBy: { id: 'asc' }
+		});
+	}
+
+	getAuthUserBasicById(userId) {
+		return this.authClient.datalogin.findUnique({
+			where: { user_id: userId },
+			select: { user_name: true, user_email: true }
+		});
+	}
 }
 
 module.exports = RolRepository;

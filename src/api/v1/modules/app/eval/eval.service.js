@@ -1,6 +1,6 @@
 const AppError = require('@utils/AppError');
 const MESSAGES = require('@constants/messages');
-const { prisma } = require('@config/prisma');
+const { prisma, userPrisma } = require('@config/prisma');
 
 const EvalRepository = require('./eval.repository');
 
@@ -34,6 +34,55 @@ class EvalService {
 		return { isDocente, isEstudiante };
 	}
 
+	async enrichWithNames(results) {
+		if (!results || results.length === 0) return results;
+
+		// Collect unique docente-materia pairs
+		const pairs = results
+			.filter(r => r.docente && r.codigo_materia)
+			.map(r => ({ docente: r.docente, codigo: parseInt(r.codigo_materia) }));
+
+		if (pairs.length === 0) return results;
+
+		// Query vista_academica_insitus to get names
+		const vistaData = await userPrisma.vista_academica_insitus.findMany({
+			where: {
+				OR: pairs.map(p => ({
+					ID_DOCENTE: p.docente,
+					COD_ASIGNATURA: p.codigo
+				}))
+			},
+			select: {
+				ID_DOCENTE: true,
+				DOCENTE: true,
+				COD_ASIGNATURA: true,
+				ASIGNATURA: true
+			},
+			distinct: ['ID_DOCENTE', 'COD_ASIGNATURA']
+		});
+
+		// Create a lookup map
+		const lookupMap = new Map();
+		vistaData.forEach(v => {
+			const key = `${v.ID_DOCENTE}_${v.COD_ASIGNATURA}`;
+			lookupMap.set(key, {
+				nombre_docente: v.DOCENTE,
+				nombre_materia: v.ASIGNATURA
+			});
+		});
+
+		// Enrich results with names
+		return results.map(r => {
+			const key = `${r.docente}_${r.codigo_materia}`;
+			const names = lookupMap.get(key);
+			return {
+				...r,
+				nombre_docente: names?.nombre_docente || null,
+				nombre_materia: names?.nombre_materia || null
+			};
+		});
+	}
+
 	async generateEvaluations(input, user) {
 		const configId = Number(input?.configId);
 		if (!user) throw new AppError(MESSAGES.GENERAL.AUTHORIZATION.UNAUTHORIZED, 401);
@@ -45,7 +94,7 @@ class EvalService {
 		const cfg = await this.repository.getConfigWithType(configId);
 		if (!cfg) throw new AppError(MESSAGES.GENERAL.NOT_FOUND.NOT_FOUND, 404);
 
-		const isEvaluacion = !!cfg?.ct_map?.tipo?.es_evaluacion;
+		const isEvaluacion = !!cfg?.es_evaluacion;
 		const { isDocente, isEstudiante } = this.getRoleFlags(user);
 
 		// Verificar si ya existen evaluaciones generadas
@@ -80,15 +129,14 @@ class EvalService {
 							id_configuracion: row.id_configuracion,
 							estudiante: row.estudiante,
 							docente: row.docente,
-							codigo_materia: row.codigo_materia,
-							cmt_gen: row.cmt_gen,
+							codigo_materia: row.codigo_materia
 						});
 					}
 				}
 				return results;
 			});
 
-			return created;
+			return this.enrichWithNames(created);
 		}
 
 		// Not an evaluation: general survey (either docente OR estudiante, without subject)
@@ -111,12 +159,11 @@ class EvalService {
 				id_configuracion: row.id_configuracion,
 				estudiante: row.estudiante,
 				docente: row.docente,
-				codigo_materia: row.codigo_materia,
-				cmt_gen: row.cmt_gen,
+				codigo_materia: row.codigo_materia
 			}];
 		});
 
-		return created;
+		return this.enrichWithNames(created);
 	}
 }
 

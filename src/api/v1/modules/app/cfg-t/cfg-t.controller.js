@@ -36,6 +36,26 @@ class CfgTController {
 			next(err);
 		}
 	};
+
+	getRoles = async (req, res, next) => {
+		try {
+			const cfgTId = Number(req.params.id);
+			const data = await service.getRolesByCfgT(cfgTId);
+			return successResponse(res, { message: 'Roles obtenidos correctamente', data });
+		} catch (err) {
+			next(err);
+		}
+	};
+
+	getEvaluacionesByCfgTUser = async (req, res, next) => {
+		try {
+			const cfgTId = Number(req.params.id);
+			const data = await service.getEvaluacionesByCfgT(cfgTId, req.user);
+			return successResponse(res, { message: 'Evaluaciones obtenidas correctamente', data });
+		} catch (err) {
+			next(err);
+		}
+	};
 }
 
 module.exports = new CfgTController();

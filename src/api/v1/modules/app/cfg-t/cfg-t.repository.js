@@ -1,7 +1,23 @@
-const { prisma } = require('@config/prisma');
+const { prisma, userPrisma } = require('@config/prisma');
 
 class CfgTRepository {
 	async findAspectosEscalasByCfgTId(cfgTId) {
+		// Fetch cfg_t data for configuration flags and tipo_evaluacion
+		const cfgT = await prisma.cfg_t.findUnique({
+			where: { id: cfgTId },
+			select: {
+				es_evaluacion: true,
+				es_cmt_gen: true,
+				es_cmt_gen_oblig: true,
+				ct_map: {
+					include: {
+						cat_t: true,
+						tipo: true
+					}
+				}
+			}
+		});
+
 		const items = await prisma.a_e.findMany({
 			where: { cfg_a: { cfg_t_id: cfgTId } },
 			include: {
@@ -62,14 +78,14 @@ class CfgTRepository {
 		}
 
 		// Return ordered list by cfg_a.orden if available
-		const result = Array.from(byAspecto.values()).sort((a, b) => {
+		const aspectos = Array.from(byAspecto.values()).sort((a, b) => {
 			const ao = a.orden ?? 0;
 			const bo = b.orden ?? 0;
 			return ao === bo ? a.id - b.id : ao - bo;
 		});
 
 		// Sort opciones (escalas) inside each aspecto by cfg_e.orden ascending
-		for (const aspecto of result) {
+		for (const aspecto of aspectos) {
 			if (Array.isArray(aspecto.opciones)) {
 				aspecto.opciones.sort((o1, o2) => {
 					const a = o1.orden ?? 0;
@@ -79,7 +95,31 @@ class CfgTRepository {
 			}
 		}
 
-		return result;
+		return {
+			es_evaluacion: cfgT?.es_evaluacion ?? null,
+			es_cmt_gen: cfgT?.es_cmt_gen ?? null,
+			es_cmt_gen_oblig: cfgT?.es_cmt_gen_oblig ?? null,
+			tipo_evaluacion: cfgT?.ct_map
+				? {
+						id: cfgT.ct_map.id,
+						categoria: cfgT.ct_map.cat_t
+							? {
+									id: cfgT.ct_map.cat_t.id,
+									nombre: cfgT.ct_map.cat_t.nombre,
+									descripcion: cfgT.ct_map.cat_t.descripcion || null,
+							  }
+							: null,
+						tipo: cfgT.ct_map.tipo
+							? {
+									id: cfgT.ct_map.tipo.id,
+									nombre: cfgT.ct_map.tipo.nombre,
+									descripcion: cfgT.ct_map.tipo.descripcion || null,
+							  }
+							: null,
+				  }
+				: null,
+			aspectos
+		};
 	}
 
 	async findCfgAAndCfgEByCfgTId(cfgTId) {
@@ -130,25 +170,60 @@ class CfgTRepository {
 		};
 	}
 
-	async findCfgTListByUserRoles(userAppRoleIds = [], userAuthRoleIds = [], isAdmin = false) {
+	async findCfgTListByUserRoles(userAppRoleIds = [], userAuthRoleIds = [], isAdmin = false, hasRole2 = false) {
 		if (isAdmin) {
 			return this.#getAllCfgTs();
+		}
+		if (hasRole2) {
+			return this.#getAllActiveCfgTs();
 		}
 		return this.#getCfgTsByUserRoles(userAppRoleIds, userAuthRoleIds);
 	}
 
 	async #getAllCfgTs() {
 		const allCfgTs = await prisma.cfg_t.findMany({
-			include: { ct_map: true },
+			include: {
+				ct_map: {
+					include: {
+						cat_t: true,
+						tipo: true
+					}
+				}
+			},
 			orderBy: { fecha_actualizacion: 'desc' },
 		});
 		return allCfgTs.map(cfgT => this.#mapCfgT(cfgT));
 	}
 
+	async #getAllActiveCfgTs() {
+		const activeCfgTs = await prisma.cfg_t.findMany({
+			where: { es_activo: true },
+			include: {
+				ct_map: {
+					include: {
+						cat_t: true,
+						tipo: true
+					}
+				}
+			},
+			orderBy: { fecha_actualizacion: 'desc' },
+		});
+		return activeCfgTs.map(cfgT => this.#mapCfgT(cfgT));
+	}
+
 	async #getCfgTsByUserRoles(userAppRoleIds = [], userAuthRoleIds = []) {
 		const cfgTRoles = await prisma.cfg_t_rol.findMany({
 			include: {
-				cfg_t: { include: { ct_map: true } },
+				cfg_t: {
+					include: {
+						ct_map: {
+							include: {
+								cat_t: true,
+								tipo: true
+							}
+						}
+					}
+				},
 				rol_mix: true,
 			},
 		});
@@ -188,15 +263,143 @@ class CfgTRepository {
 		return {
 			id: cfgT.id,
 			tipo_evaluacion_id: cfgT.tipo_evaluacion_id,
-			tipo_evaluacion: cfgT.ct_map?.nombre || null,
 			fecha_inicio: cfgT.fecha_inicio,
 			fecha_fin: cfgT.fecha_fin,
+			es_evaluacion: cfgT.es_evaluacion,
 			es_cmt_gen: cfgT.es_cmt_gen,
 			es_cmt_gen_oblig: cfgT.es_cmt_gen_oblig,
 			es_activo: cfgT.es_activo,
 			fecha_creacion: cfgT.fecha_creacion,
 			fecha_actualizacion: cfgT.fecha_actualizacion,
+			tipo_evaluacion: cfgT.ct_map
+				? {
+						id: cfgT.ct_map.id,
+						categoria: cfgT.ct_map.cat_t
+							? {
+									id: cfgT.ct_map.cat_t.id,
+									nombre: cfgT.ct_map.cat_t.nombre,
+									descripcion: cfgT.ct_map.cat_t.descripcion || null,
+							  }
+							: null,
+						tipo: cfgT.ct_map.tipo
+							? {
+									id: cfgT.ct_map.tipo.id,
+									nombre: cfgT.ct_map.tipo.nombre,
+									descripcion: cfgT.ct_map.tipo.descripcion || null,
+							  }
+							: null,
+				  }
+				: null,
 		};
+	}
+
+	async findRolesByCfgTId(cfgTId) {
+		const cfgTRoles = await prisma.cfg_t_rol.findMany({
+			where: { cfg_t_id: cfgTId },
+			include: { rol_mix: true },
+		});
+
+		return cfgTRoles.map(cfgTRol => ({
+			rol_mix_id: cfgTRol.rol_mix?.id ?? null,
+			rol_origen_id: cfgTRol.rol_mix?.rol_origen_id ?? null,
+			nombre: cfgTRol.rol_mix?.nombre ?? null,
+			origen: cfgTRol.rol_mix?.origen ?? null,
+		}));
+	}
+
+	async findEvaluacionesByCfgTAndUser(cfgTId, username, { isDocente, isEstudiante }) {
+		const configId = Number(cfgTId);
+		const userId = String(username);
+
+		if (!configId || !userId) return [];
+
+		const where = {
+			id_configuracion: configId,
+		};
+
+		if (isEstudiante) {
+			where.estudiante = userId;
+		} else if (isDocente) {
+			where.docente = userId;
+			where.cfg_t = { is: { es_evaluacion: false } };
+		} else {
+			return [];
+		}
+
+		const rows = await prisma.eval.findMany({
+			where,
+			select: {
+				id: true,
+				id_configuracion: true,
+				estudiante: true,
+				docente: true,
+				codigo_materia: true,
+				cfg_t: { select: { es_evaluacion: true } },
+				eval_det: { select: { id: true }, take: 1 },
+			},
+			orderBy: { id: 'asc' },
+		});
+
+		const baseResults = rows.map(row => ({
+			id: row.id,
+			id_configuracion: row.id_configuracion,
+			estudiante: row.estudiante,
+			docente: row.docente,
+			codigo_materia: row.codigo_materia,
+			es_evaluacion: row.cfg_t?.es_evaluacion ?? null,
+			es_finalizada: row.eval_det && row.eval_det.length > 0,
+		}));
+
+		return this.enrichWithNames(baseResults);
+	}
+
+	async enrichWithNames(results) {
+		if (!results || results.length === 0) return results;
+
+		// Collect unique docente-materia pairs
+		const pairs = results
+			.filter(r => r.docente && r.codigo_materia)
+			.map(r => ({ docente: r.docente, codigo: parseInt(r.codigo_materia) }));
+
+		if (pairs.length === 0) return results;
+
+		// Query vista_academica_insitus to get names
+		const vistaData = await userPrisma.vista_academica_insitus.findMany({
+			where: {
+				OR: pairs.map(p => ({
+					ID_DOCENTE: p.docente,
+					COD_ASIGNATURA: p.codigo
+				}))
+			},
+			select: {
+				ID_DOCENTE: true,
+				DOCENTE: true,
+				COD_ASIGNATURA: true,
+				ASIGNATURA: true
+			},
+			distinct: ['ID_DOCENTE', 'COD_ASIGNATURA']
+		});
+
+		// Create a lookup map
+		const lookupMap = new Map();
+		vistaData.forEach(v => {
+			const key = `${v.ID_DOCENTE}_${v.COD_ASIGNATURA}`;
+			lookupMap.set(key, {
+				nombre_docente: v.DOCENTE,
+				nombre_materia: v.ASIGNATURA
+			});
+		});
+
+		// Enrich results with names
+		return results.map(r => {
+			const key = `${r.docente}_${r.codigo_materia}`;
+			const names = lookupMap.get(key);
+			return {
+				...r,
+				nombre_docente: names?.nombre_docente || null,
+				nombre_materia: names?.nombre_materia || null
+			};
+		});
 	}
 }
 

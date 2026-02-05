@@ -154,6 +154,9 @@ class DataloginService {
     const roles = Array.from(new Set([...rolesAuthNames, ...rolesAppNames]));
     const rolesIds = Array.from(new Set([...rolesAuthIds, ...rolesAppIds]));
 
+    // Get programs assigned to user
+    const programs = await this.repository.findProgramsByUserId(user.user_id);
+
     const payload = {
       id: user.user_id,
       username: user.user_username,
@@ -184,7 +187,8 @@ class DataloginService {
         rolesApp,
         rolesAppIds,
         roles,
-        rolesIds
+        rolesIds,
+        programs
       }
     };
   }

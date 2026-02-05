@@ -22,6 +22,8 @@
  *         fecha_fin:
  *           type: string
  *           format: date
+ *         es_evaluacion:
+ *           type: boolean
  *         es_cmt_gen:
  *           type: boolean
  *         es_cmt_gen_oblig:
@@ -34,6 +36,36 @@
  *         fecha_actualizacion:
  *           type: string
  *           format: date-time
+ *         tipo_evaluacion:
+ *           type: object
+ *           nullable: true
+ *           properties:
+ *             id:
+ *               type: integer
+ *             categoria:
+ *               type: object
+ *               nullable: true
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 nombre:
+ *                   type: string
+ *                   example: "Docente"
+ *                 descripcion:
+ *                   type: string
+ *                   nullable: true
+ *             tipo:
+ *               type: object
+ *               nullable: true
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 nombre:
+ *                   type: string
+ *                   example: "Evaluación In Situ"
+ *                 descripcion:
+ *                   type: string
+ *                   nullable: true
  *         rolesRequeridos:
  *           type: array
  *           items:
@@ -174,6 +206,76 @@
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/CfgE'
+ *
+ *     RolMix:
+ *       type: object
+ *       properties:
+ *         rol_mix_id:
+ *           type: integer
+ *           nullable: true
+ *         rol_origen_id:
+ *           type: integer
+ *           nullable: true
+ *         nombre:
+ *           type: string
+ *           nullable: true
+ *         origen:
+ *           type: string
+ *           enum: [APP, AUTH]
+ *           nullable: true
+ *
+ *     RolesResponse:
+ *       type: object
+ *       properties:
+ *         message:
+ *           type: string
+ *           example: Roles obtenidos correctamente
+ *         data:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/RolMix'
+ *
+ *     EvalByUserItem:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         id_configuracion:
+ *           type: integer
+ *         estudiante:
+ *           type: string
+ *           nullable: true
+ *         docente:
+ *           type: string
+ *           nullable: true
+ *         codigo_materia:
+ *           type: string
+ *           nullable: true
+ *         es_evaluacion:
+ *           type: boolean
+ *           nullable: true
+ *         es_finalizada:
+ *           type: boolean
+ *           description: Indica si la evaluación/encuesta ha sido completada (tiene respuestas en eval_det)
+ *         nombre_docente:
+ *           type: string
+ *           nullable: true
+ *           example: "Juan Pérez"
+ *         nombre_materia:
+ *           type: string
+ *           nullable: true
+ *           example: "Programación Web"
+ *
+ *     EvalByUserResponse:
+ *       type: object
+ *       properties:
+ *         message:
+ *           type: string
+ *           example: Evaluaciones obtenidas correctamente
+ *         data:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/EvalByUserItem'
  */
 
 /**
@@ -243,6 +345,66 @@
  *               $ref: '#/components/schemas/CfgACfgEResponse'
  *       400:
  *         description: Solicitud inválida
+ *       404:
+ *         description: No encontrado
+ */
+
+/**
+ * @swagger
+ * /cfg/t/{id}/roles:
+ *   get:
+ *     summary: Obtiene los roles asignados a una configuración tipo
+ *     tags: [Configuración Tipo]
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID de cfg_t
+ *     responses:
+ *       200:
+ *         description: Listado de roles asignados a la cfg_t
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/RolesResponse'
+ *       400:
+ *         description: Solicitud inválida
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: Sin autorización
+ *       404:
+ *         description: No encontrado
+ */
+
+/**
+ * @swagger
+ * /cfg/t/{id}/evals:
+ *   get:
+ *     summary: Obtiene evaluaciones/encuestas del usuario autenticado por configuración
+ *     tags: [Configuración Tipo]
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID de cfg_t
+ *     responses:
+ *       200:
+ *         description: Listado de evaluaciones/encuestas del usuario autenticado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/EvalByUserResponse'
+ *       400:
+ *         description: Solicitud inválida
+ *       401:
+ *         description: No autenticado
+ *       403:
+ *         description: Sin autorización
  *       404:
  *         description: No encontrado
  */
