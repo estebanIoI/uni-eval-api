@@ -11,9 +11,9 @@ const rol = createValidatedCrud(
   {
     rules: {
       nombre: {
-        onlyLetters: { allowSpaces: true },
-        stringLength: { min: 3, max: 100 }
-      }
+        alphaNumericSpanish: true,
+        stringLength: { min: 1, max: 100 }
+      },
     }
   }
 );

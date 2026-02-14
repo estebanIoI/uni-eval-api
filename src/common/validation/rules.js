@@ -8,19 +8,22 @@
  */
 const syncRules = {
   /**
-   * Valida que un string contenga solo letras (y espacios opcionales)
+   * Valida que un string contenga letras, números, signos comunes en español y espacios SIEMPRE permitidos
    * @param {*} value - Valor a validar
    * @param {object} config - { allowSpaces: boolean }
    */
-  onlyLetters: (value, config = {}) => {
+
+  alphaNumericSpanish: (value) => {
     if (value == null || value === '') return null;
     if (typeof value !== 'string') return 'Debe ser texto';
-    const pattern = config.allowSpaces ? /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/ : /^[a-zA-ZáéíóúÁÉÍÓÚñÑ]+$/;
+
+    // Regex: letras, números, signos comunes en español y espacios SIEMPRE permitidos
+    const pattern = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9,.;:¿?¡!()\-\s]+$/;
+
     if (!pattern.test(value)) {
-      return config.allowSpaces 
-        ? 'Solo se permiten letras y espacios'
-        : 'Solo se permiten letras';
+      return 'Solo se permiten letras, números, signos básicos y espacios';
     }
+
     return null;
   },
 

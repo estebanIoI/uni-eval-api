@@ -34,7 +34,7 @@ try {
  * @example
  * const aspectoValidation = createValidation('aspecto', {
  *   nombre: {
- *     onlyLetters: { allowSpaces: true },
+ *     alphaNumericSpanish: true,
  *     stringLength: { min: 3, max: 100 }
  *   }
  * });

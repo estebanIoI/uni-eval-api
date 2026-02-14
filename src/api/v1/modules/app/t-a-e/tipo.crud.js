@@ -13,14 +13,15 @@ const tipo = createValidatedCrud(
   {
     rules: {
       nombre: {
-        onlyLetters: { allowSpaces: true },
-        stringLength: { min: 3, max: 100 }
+        alphaNumericSpanish: true,
+        stringLength: { min: 1, max: 100 }
       },
       descripcion: {
-        stringLength: { min: 3, max: 500 }
+        alphaNumericSpanish: true,
+        stringLength: { min: 1, max: 500 }
       }
     }
-  }
+  },
 );
 
 const catT = createValidatedCrud(
@@ -33,14 +34,15 @@ const catT = createValidatedCrud(
   {
     rules: {
       nombre: {
-        onlyLetters: { allowSpaces: true },
-        stringLength: { min: 3, max: 100 }
+        alphaNumericSpanish: true,
+        stringLength: { min: 1, max: 100 }
       },
       descripcion: {
-        stringLength: { min: 3, max: 500 }
+        alphaNumericSpanish: true,
+        stringLength: { min: 1, max: 500 }
       }
     }
-  }
+  },
 );
 
 const cfgT = createValidatedCrud(
