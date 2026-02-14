@@ -38,6 +38,34 @@ class EvalDetRepository {
 			});
 		});
 	}
+
+	async getExistingItemComments(aeIds) {
+		if (!aeIds.length) return [];
+		return prisma.eval_det.findMany({
+			where: { 
+				a_e_id: { in: aeIds },
+				cmt: { not: null }
+			},
+			select: { a_e_id: true, cmt: true }
+		});
+	}
+
+	async getExistingGeneralComments(evalId) {
+		const currentEval = await prisma.eval.findUnique({
+			where: { id: evalId },
+			select: { id_configuracion: true }
+		});
+
+		if (!currentEval) return [];
+
+		return prisma.eval.findMany({
+			where: { 
+				id_configuracion: currentEval.id_configuracion,
+				cmt_gen: { not: null }
+			},
+			select: { id: true, cmt_gen: true }
+		});
+	}
 }
 
 module.exports = EvalDetRepository;
