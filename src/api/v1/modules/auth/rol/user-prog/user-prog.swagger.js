@@ -1,29 +1,29 @@
 /**
  * @swagger
  * tags:
- *   - name: User Rol
- *     description: Gestión de roles por usuario
+ *   - name: User Prog
+ *     description: Gestión de programas por usuario
  */
 
 /**
  * @swagger
  * components:
  *   schemas:
- *     UserRolWithName:
+ *     UserProgWithName:
  *       type: object
  *       properties:
  *         id:
  *           type: integer
  *           example: 1
- *         user_id:
+ *         user_rol_id:
  *           type: integer
- *           example: 2191
- *         rol_id:
+ *           example: 2
+ *         prog_id:
  *           type: integer
  *           example: 1
- *         rol_nombre:
+ *         prog_nombre:
  *           type: string
- *           example: "Administrador"
+ *           example: "Ingeniería en Sistemas"
  *         fecha_creacion:
  *           type: string
  *           format: date-time
@@ -53,21 +53,21 @@
  *         role_name:
  *           type: string
  *           example: "Administrador"
- *     UserRolWithDataLogin:
+ *     UserProgWithDataLogin:
  *       type: object
  *       properties:
  *         id:
  *           type: integer
  *           example: 1
- *         user_id:
+ *         user_rol_id:
  *           type: integer
- *           example: 2191
- *         rol_id:
+ *           example: 2
+ *         prog_id:
  *           type: integer
  *           example: 1
- *         rol_nombre:
+ *         prog_nombre:
  *           type: string
- *           example: "Administrador"
+ *           example: "Ingeniería en Sistemas"
  *         fecha_creacion:
  *           type: string
  *           format: date-time
@@ -82,10 +82,10 @@
 
 /**
  * @swagger
- * /user/rol/u:
+ * /user/prog/u:
  *   get:
- *     summary: Obtener roles de usuario con nombre de rol
- *     tags: [User Rol]
+ *     summary: Obtener programas de usuario con datos del usuario
+ *     tags: [User Prog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -116,10 +116,10 @@
  *         name: search
  *         schema:
  *           type: string
- *         description: Término de búsqueda (busca en rol_nombre, user_name, user_username, user_email)
+ *         description: Término de búsqueda (busca en prog_nombre, user_name, user_username, user_email)
  *     responses:
  *       200:
- *         description: Lista paginada de roles de usuario con nombre de rol
+ *         description: Lista paginada de programas de usuario con datos del usuario
  *         content:
  *           application/json:
  *             schema:
@@ -134,7 +134,7 @@
  *                 data:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/UserRolWithName'
+ *                     $ref: '#/components/schemas/UserProgWithDataLogin'
  *                 pagination:
  *                   type: object
  *                   properties:

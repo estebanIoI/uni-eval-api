@@ -326,53 +326,102 @@ async function getEvaluationSummaryByProgram({ cfg_t, sede, periodo, programa, s
 	return { programas };
 }
 
-async function getAllDocentesStats({ cfg_t, sede, periodo, programa, semestre, grupo, page = 1, limit = 10 }) {
+async function getAllDocentesStats({ cfg_t, sede, periodo, programa, semestre, grupo, page = 1, limit = 10 }, search = {}, sort = {}) {
 	const cfgId = Number(cfg_t);
 	if (!cfgId) throw new Error('cfg_t is required');
 
 	const whereVista = buildVistaWhere({ sede, periodo, programa, semestre, grupo });
 
-	const vista = await userPrisma.vista_academica_insitus.findMany({
+	// ============================================================
+	// STEP 1: Get UNIQUE docentes from vista with DISTINCT
+	// This reduces the dataset size significantly
+	// ⚠️ IMPORTANT: distinct requires orderBy in Prisma
+	// ============================================================
+	const vistaDistinct = await userPrisma.vista_academica_insitus.findMany({
 		where: whereVista,
-		select: { ID_ESTUDIANTE: true, COD_ASIGNATURA: true, GRUPO: true, DOCENTE: true, ID_DOCENTE: true }
+		select: { ID_DOCENTE: true, DOCENTE: true },
+		distinct: ['ID_DOCENTE'],
+		orderBy: { ID_DOCENTE: 'asc' } // ✅ Required for distinct to work properly
 	});
 
-	// Group by docente
-	const byDocente = new Map();
-	for (const v of vista) {
-		if (!v.ID_DOCENTE) continue;
-		if (!byDocente.has(v.ID_DOCENTE)) {
-			byDocente.set(v.ID_DOCENTE, { rows: [], nombre: v.DOCENTE });
-		}
-		byDocente.get(v.ID_DOCENTE).rows.push(v);
+	// ============================================================
+	// STEP 2: Apply search filter on docente name (in memory, small dataset)
+	// ============================================================
+	let filteredDocentes = vistaDistinct;
+	if (search?.isActive && search?.term) {
+		const searchTerm = search.caseSensitive ? search.term : search.term.toLowerCase();
+		filteredDocentes = vistaDistinct.filter(item => {
+			const nombreDocente = item.DOCENTE || '';
+			const searchableText = search.caseSensitive ? nombreDocente : nombreDocente.toLowerCase();
+			// ✅ Use includes() to search ANYWHERE in the name (substring search)
+			return searchableText.includes(searchTerm);
+		});
 	}
 
-	const docenteIds = Array.from(byDocente.keys());
-	const total = docenteIds.length;
-	const skip = (page - 1) * limit;
-	const paginatedIds = docenteIds.slice(skip, skip + limit);
+	// ============================================================
+	// STEP 3: Apply sorting on docente names (in memory, small dataset)
+	// ============================================================
+	if (sort?.sortBy === 'nombre_docente' && sort?.sortOrder) {
+		const order = sort.sortOrder === 'desc' ? -1 : 1;
+		filteredDocentes.sort((a, b) => {
+			const aVal = a.DOCENTE || '';
+			const bVal = b.DOCENTE || '';
+			return order * String(aVal).localeCompare(String(bVal));
+		});
+	}
 
-	const results = [];
-	for (const docenteId of paginatedIds) {
+	// ============================================================
+	// STEP 4: Apply pagination on docente list (DB efficient)
+	// ============================================================
+	const total = filteredDocentes.length;
+	const skip = (page - 1) * limit;
+	const paginatedDocentes = filteredDocentes.slice(skip, skip + limit);
+
+	// ============================================================
+	// STEP 5: Calculate stats ONLY for docentes in current page
+	// This avoids N+1 for all docentes, only for this page
+	// ============================================================
+	const pageResults = [];
+	for (const docente of paginatedDocentes) {
 		const stats = await getDocenteStats({
 			cfg_t,
-			docente: docenteId,
+			docente: docente.ID_DOCENTE,
 			sede,
 			periodo,
 			programa,
 			semestre,
 			grupo
 		});
-		results.push(stats);
+		pageResults.push(stats);
+	}
+
+	// ============================================================
+	// STEP 6: Apply metric-based sorting (promedio_general, etc)
+	// Only applied to current page data (small dataset)
+	// ============================================================
+	if (sort?.sortBy && sort?.sortBy !== 'nombre_docente' && sort?.sortOrder) {
+		const { sortBy, sortOrder } = sort;
+		const order = sortOrder === 'desc' ? -1 : 1;
+		
+		pageResults.sort((a, b) => {
+			let aVal = a[sortBy];
+			let bVal = b[sortBy];
+			
+			// Handle null values
+			if (aVal == null) aVal = sortOrder === 'desc' ? -Infinity : Infinity;
+			if (bVal == null) bVal = sortOrder === 'desc' ? -Infinity : Infinity;
+			
+			return order * (Number(aVal) - Number(bVal));
+		});
 	}
 
 	return {
-		data: results,
+		data: pageResults,
 		pagination: {
 			page,
 			limit,
 			total,
-			pages: Math.ceil(total / limit)
+			pages: Math.ceil(total / limit) || 1
 		}
 	};
 }

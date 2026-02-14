@@ -8,7 +8,11 @@ class BaseController {
 
   getAll = async (req, res, next) => {
     try {
-      const { data, pagination } = await this.service.getAll(req.pagination);
+      const { data, pagination } = await this.service.getAll({
+        pagination: req.pagination,
+        sort: req.sort,
+        search: req.search
+      });
       if (pagination) {
         return successPaginatedResponse(res, {
           message: MESSAGES.GENERAL.SUCCESS.FETCH_SUCCESS,

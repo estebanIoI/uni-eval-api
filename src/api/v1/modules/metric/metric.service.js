@@ -54,10 +54,10 @@ async function evaluationSummaryByProgram(query) {
     return repo.getEvaluationSummaryByProgram(query);
 }
 
-async function docenteStats(query) {
+async function docenteStats(query, search, sort) {
 	const { page, limit, ...filterQuery } = query;
 	if (!filterQuery.docente) {
-		return repo.getAllDocentesStats({ ...filterQuery, page: parseInt(page) || 1, limit: parseInt(limit) || 10 });
+		return repo.getAllDocentesStats({ ...filterQuery, page: parseInt(page) || 1, limit: parseInt(limit) || 10 }, search, sort);
 	}
 	return repo.getDocenteStats(filterQuery);
 }

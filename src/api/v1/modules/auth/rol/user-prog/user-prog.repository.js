@@ -1,32 +1,11 @@
 const { localPrisma, authPrisma } = require('@config/prisma');
 
-class UserRolRepository {
+class UserProgRepository {
 	constructor({ localClient = localPrisma, authClient = authPrisma } = {}) {
 		this.localClient = localClient;
 		this.authClient = authClient;
-		this.model = this.localClient.user_rol;
+		this.model = this.localClient.user_prog;
 		this.dataloginModel = this.authClient.datalogin;
-	}
-
-	async findPaginatedWithRolName({ skip = 0, limit = 10 } = {}) {
-		const [items, total] = await Promise.all([
-			this.model.findMany({
-				skip,
-				take: limit,
-				orderBy: { id: 'asc' },
-				select: {
-					id: true,
-					user_id: true,
-					rol_id: true,
-					fecha_creacion: true,
-					fecha_actualizacion: true,
-					rol: { select: { nombre: true } }
-				}
-			}),
-			this.model.count()
-		]);
-
-		return { items, total };
 	}
 
 	async findPaginatedWithDataLogin({ skip = 0, limit = 10, sort = null, search = null } = {}) {
@@ -35,11 +14,12 @@ class UserRolRepository {
 			take: limit,
 			select: {
 				id: true,
-				user_id: true,
-				rol_id: true,
+				user_rol_id: true,
+				prog_id: true,
 				fecha_creacion: true,
 				fecha_actualizacion: true,
-				rol: { select: { nombre: true } }
+				prog: { select: { nombre: true } },
+				user_rol: { select: { user_id: true } }
 			}
 		};
 
@@ -75,10 +55,10 @@ class UserRolRepository {
 				userIdsFromDataLogin = matchingDatalogins.map(dl => dl.user_id);
 			}
 
-			// Buscar en rol_nombre
-			if (search.fields.includes('rol_nombre')) {
+			// Buscar en prog_nombre
+			if (search.fields.includes('prog_nombre')) {
 				whereConditions.push({
-					rol: {
+					prog: {
 						nombre: { contains: search.term }
 					}
 				});
@@ -87,7 +67,9 @@ class UserRolRepository {
 			// Agregar filtro por user_ids de datalogin
 			if (userIdsFromDataLogin && userIdsFromDataLogin.length > 0) {
 				whereConditions.push({
-					user_id: { in: userIdsFromDataLogin }
+					user_rol: {
+						user_id: { in: userIdsFromDataLogin }
+					}
 				});
 			} else if (hasDataloginSearch && (!userIdsFromDataLogin || userIdsFromDataLogin.length === 0)) {
 				// Si buscó en datalogin pero no encontró nada, no retornar resultados
@@ -105,7 +87,7 @@ class UserRolRepository {
 		]);
 
 		// Obtener datos de datalogin para cada user_id
-		const userIds = items.map(item => item.user_id);
+		const userIds = items.map(item => item.user_rol.user_id);
 		const dataLogins = userIds.length > 0
 			? await this.dataloginModel.findMany({
 					where: { user_id: { in: userIds } },
@@ -130,11 +112,11 @@ class UserRolRepository {
 		// Enriquecer items con datos de datalogin
 		const enrichedItems = items.map(item => ({
 			...item,
-			datalogin: dataLoginMap[item.user_id] || null
+			datalogin: dataLoginMap[item.user_rol.user_id] || null
 		}));
 
 		return { items: enrichedItems, total };
 	}
 }
 
-module.exports = UserRolRepository;
+module.exports = UserProgRepository;

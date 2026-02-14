@@ -1,5 +1,8 @@
 const express = require('express');
 const ctrl = require('./metric.controller');
+const pagination = require('@middlewares/http/pagination');
+const search = require('@middlewares/http/search');
+const sort = require('@middlewares/http/sort');
 
 const router = express.Router();
 
@@ -13,8 +16,13 @@ router.get('/evaluations/summary/programas', ctrl.summaryByProgram);
 router.get('/evaluations/ranking', ctrl.ranking);
 
 // GET /metric/evaluations/docente?cfg_t=1&docente=...&...filters
-// If docente is not provided, returns stats for all docentes
-router.get('/evaluations/docentes', ctrl.docente);
+// If docente is not provided, returns stats for all docentes (paginated)
+router.get('/evaluations/docentes',
+	pagination({ defaultPage: 1, defaultLimit: 10, maxLimit: 100 }),
+	search({ searchFields: ['nombre_docente'], minLength: 2 }),
+	sort({ defaultSortBy: 'promedio_general', defaultSortOrder: 'desc', allowedFields: ['promedio_general', 'total_evaluaciones', 'porcentaje_cumplimiento', 'nombre_docente'] }),
+	ctrl.docente
+);
 
 // GET /metric/evaluations/docente/aspectos?cfg_t=1&docente=...&codigo_materia=...
 // docente y codigo_materia son opcionales en query

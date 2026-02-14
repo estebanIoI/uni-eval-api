@@ -21,6 +21,9 @@ const aspecto = createValidatedCrud(
         stringLength: { min: 10, max: 500 }
       }
     }
+  },
+  {
+    searchFields: ['nombre', 'descripcion']
   }
 );
 

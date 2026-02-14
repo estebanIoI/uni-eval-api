@@ -57,4 +57,24 @@ async function bulkAERows(items) {
 	return await repo.createMany(rows);
 }
 
-module.exports = { bulkAERows };
+async function deleteAspectoWithEscalas(aspectoId, cfgTId) {
+	// Delete an aspecto and all its associated escalas from a_e table scoped to cfg_t_id
+	if (!aspectoId || !cfgTId) {
+		throw new Error('aspecto_id and cfg_t_id are required');
+	}
+	return await repo.deleteByAspectoIdAndCfgT(aspectoId, cfgTId);
+}
+
+async function updateAspectoIdInAllEscalas(oldAspectoId, newAspectoId, cfgTId) {
+	// Update aspecto_id in all records keeping all escalas unchanged
+	// Requires cfg_t_id to ensure update is scoped to a specific configuration
+	if (!oldAspectoId || !newAspectoId || !cfgTId) {
+		throw new Error('old aspecto_id, new aspecto_id and cfg_t_id are all required');
+	}
+	if (oldAspectoId === newAspectoId) {
+		throw new Error('Old and new aspecto_id cannot be the same');
+	}
+	return await repo.updateAspectoId(oldAspectoId, newAspectoId, cfgTId);
+}
+
+module.exports = { bulkAERows, deleteAspectoWithEscalas, updateAspectoIdInAllEscalas };

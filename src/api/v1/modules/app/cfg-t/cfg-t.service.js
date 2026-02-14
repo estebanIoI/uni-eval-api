@@ -12,15 +12,18 @@ class CfgTService {
 	}
 
 	getCfgAAndCfgE(cfgTId) {
+		if (!cfgTId) {
+			return this.repository.findAllCfgAAndCfgE();
+		}
 		return this.repository.findCfgAAndCfgEByCfgTId(cfgTId);
 	}
 
-	getCfgTList(user) {
+	getCfgTList(user, search, sort) {
 		const userAppRoleIds = user?.rolesAppIds || [];
 		const userAuthRoleIds = user?.rolesAuthIds || [];
 		const isAdmin = hasGlobalRole(user);
 		const isDocente = userAuthRoleIds.includes(2);
-		return this.repository.findCfgTListByUserRoles(userAppRoleIds, userAuthRoleIds, isAdmin, isDocente);
+		return this.repository.findCfgTListByUserRoles(userAppRoleIds, userAuthRoleIds, isAdmin, isDocente, search, sort);
 	}
 
 	getRolesByCfgT(cfgTId) {

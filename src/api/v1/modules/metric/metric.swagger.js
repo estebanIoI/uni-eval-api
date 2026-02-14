@@ -716,11 +716,16 @@
  * @swagger
  * /metric/evaluations/docentes:
  *   get:
- *     summary: Métricas generales del docente con soporte para paginación
+ *     summary: Métricas generales del docente con soporte para paginación, búsqueda y ordenamiento
  *     description: |
  *       Retorna métricas para uno o todos los docentes.
  *       - Si se proporciona docente, retorna métricas para ese docente específico.
  *       - Si no, retorna lista paginada de todos los docentes con sus métricas.
+ *       
+ *       **Búsqueda y ordenamiento (solo cuando NO se especifica docente):**
+ *       - `search`: Busca por nombre del docente (mínimo 2 caracteres)
+ *       - `sortBy`: Ordena por promedio_general, total_evaluaciones, porcentaje_cumplimiento o nombre_docente
+ *       - `sortOrder`: Orden ascendente (asc) o descendente (desc, por defecto)
  *     tags: [Metric]
  *     parameters:
  *       - in: query
@@ -746,6 +751,27 @@
  *           type: integer
  *           default: 10
  *         description: Cantidad de registros por página (solo cuando docente no está especificado)
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Término de búsqueda para filtrar por nombre del docente (mínimo 2 caracteres). Solo aplica cuando no se especifica docente.
+ *         example: "Juan"
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [promedio_general, total_evaluaciones, porcentaje_cumplimiento, nombre_docente]
+ *         description: Campo por el cual ordenar los resultados. Solo aplica cuando no se especifica docente.
+ *         example: "promedio_general"
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Orden de clasificación (ascendente o descendente). Solo aplica cuando no se especifica docente.
+ *         example: "desc"
  *       - in: query
  *         name: sede
  *         schema:

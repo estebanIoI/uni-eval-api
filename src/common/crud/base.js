@@ -4,7 +4,9 @@ const BaseController = require('./base.controller');
 const baseRouter = require('./base.router');
 const buildCrudDocs = require('./base.swagger');
 const { extractSchemaFromPrisma } = require('../extractSchemaPrisma');
-const pagination = require('@middlewares/pagination');
+const pagination = require('@middlewares/http/pagination');
+const sort = require('@middlewares/http/sort');
+const search = require('@middlewares/http/search');
 
 function extractBooleanFields(schema) {
   if (!schema || typeof schema !== 'object') return [];
@@ -30,12 +32,19 @@ function createCrudModule(options, manualSchema = null, routerConfig = {}) {
     const controller = new BaseController(service);
     const realRoute = `/${legacyName}`;
     
-    // Si no hay validación, agregar middleware de paginación por defecto
+    // Si no hay validación, agregar middlewares de paginación, búsqueda y orden por defecto
     const finalRouterConfig = { ...routerConfig, booleanFields };
     if (!routerConfig.validation) {
+      const sortOptions = routerConfig.sortOptions || {};
+      const searchOptions = routerConfig.searchOptions || {};
+      const searchFields = routerConfig.searchFields || [];
       finalRouterConfig.validation = {
         middlewares: {
-          getAll: pagination({ maxLimit: 100 })
+          getAll: [
+            pagination({ maxLimit: 100 }),
+            sort(sortOptions),
+            search({ searchFields, ...searchOptions })
+          ]
         }
       };
     }
@@ -64,12 +73,19 @@ function createCrudModule(options, manualSchema = null, routerConfig = {}) {
 
   const realRoute = route || `/${name}`;
   
-  // Si no hay validación, agregar middleware de paginación por defecto
+  // Si no hay validación, agregar middlewares de paginación, búsqueda y orden por defecto
   const finalRouterConfig = { ...routerConfig, booleanFields };
   if (!routerConfig.validation) {
+    const sortOptions = routerConfig.sortOptions || {};
+    const searchOptions = routerConfig.searchOptions || {};
+    const searchFields = routerConfig.searchFields || [];
     finalRouterConfig.validation = {
       middlewares: {
-        getAll: pagination({ maxLimit: 100 })
+        getAll: [
+          pagination({ maxLimit: 100 }),
+          sort(sortOptions),
+          search({ searchFields, ...searchOptions })
+        ]
       }
     };
   }

@@ -118,11 +118,14 @@ function buildCrudDocs(nameOrOptions, schema) {
   const rootPathOps = {};
   if (isEnabled('list')) {
     rootPathOps.get = {
-      summary: `Listar todos los ${displayName} con paginación`,
+      summary: `Listar todos los ${displayName} con paginación, búsqueda y orden`,
       tags: [displayName],
       parameters: [
-        { in: "query", name: "page", schema: { type: "integer", default: 1 } },
-        { in: "query", name: "limit", schema: { type: "integer", default: 10 } },
+        { in: "query", name: "page", schema: { type: "integer", default: 1 }, description: "Número de página" },
+        { in: "query", name: "limit", schema: { type: "integer", default: 10 }, description: "Registros por página" },
+        { in: "query", name: "sortBy", schema: { type: "string", default: "id" }, description: "Campo para ordenar" },
+        { in: "query", name: "sortOrder", schema: { type: "string", enum: ["asc", "desc"], default: "asc" }, description: "Orden (asc o desc)" },
+        { in: "query", name: "search", schema: { type: "string" }, description: "Término de búsqueda (también acepta 'q')" },
       ],
       responses: {
         200: {

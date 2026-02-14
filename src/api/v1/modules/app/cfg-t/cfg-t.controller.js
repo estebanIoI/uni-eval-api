@@ -7,7 +7,7 @@ const service = new CfgTService(new CfgTRepository());
 class CfgTController {
 	getCfgTList = async (req, res, next) => {
 		try {
-			const data = await service.getCfgTList(req.user);
+			const data = await service.getCfgTList(req.user, req.search, req.sort);
 			return successResponse(res, {
 				message: 'Listado de configuraciones obtenido correctamente',
 				data,
@@ -29,9 +29,14 @@ class CfgTController {
 
 	getCfgAAndCfgE = async (req, res, next) => {
 		try {
-			const cfgTId = Number(req.params.id);
+			const cfgTId = req.params.id ? Number(req.params.id) : undefined;
 			const data = await service.getCfgAAndCfgE(cfgTId);
-			return successResponse(res, { message: 'Configuración cfg_a y cfg_e obtenida', data });
+			const isArray = Array.isArray(data);
+			return successResponse(res, { 
+				success: true,
+				message: isArray ? 'Configuraciones cfg_a y cfg_e obtenidas' : 'Configuración cfg_a y cfg_e obtenida', 
+				data 
+			});
 		} catch (err) {
 			next(err);
 		}

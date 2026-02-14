@@ -7,7 +7,9 @@ const path = require('path');
 const { SchemaLoader, SchemaFactory } = require('@common/validation/schema.factory');
 const { EntityValidator } = require('@common/validation/entity.validator');
 const { validate, validateId } = require('@common/validation/validation.middleware');
-const pagination = require('@middlewares/pagination');
+const pagination = require('@middlewares/http/pagination');
+const sort = require('@middlewares/http/sort');
+const search = require('@middlewares/http/search');
 const { prisma } = require('@config/prisma');
 
 // Loader global para schemas
@@ -40,7 +42,10 @@ try {
 function createValidation(modelName, customRules = {}, options = {}) {
   const {
     excludeFields = ['id', 'fecha_creacion', 'fecha_actualizacion'],
-    context = { prisma }
+    context = { prisma },
+    searchFields = [],
+    searchOptions = {},
+    sortOptions = {}
   } = options;
 
   // Si no hay loader, retornar validadores vacíos
@@ -108,7 +113,11 @@ function createValidation(modelName, customRules = {}, options = {}) {
       update: validate(updateValidator),
       delete: validateId(),
       getById: validateId(),
-      getAll: pagination({ maxLimit: 100 }),
+      getAll: [
+        pagination({ maxLimit: 100 }),
+        sort(sortOptions),
+        search({ searchFields, ...searchOptions })
+      ],
       bulk: validate(bulkValidator),
       toggle: toggleValidator ? validate(toggleValidator) : null
     };
@@ -165,10 +174,17 @@ function createValidatedCrud(crudConfig, validationConfig = {}, routerConfig = {
   const { createCrudModule } = require('./base');
   const { name } = crudConfig;
   const { rules = {}, excludeFields, context } = validationConfig;
+  const { searchFields, searchOptions, sortOptions } = routerConfig;
 
   // Crear CRUD base
   // Primero construir la validación para poder inyectarla al router
-  const validation = createValidation(name, rules, { excludeFields, context });
+  const validation = createValidation(name, rules, {
+    excludeFields,
+    context,
+    searchFields,
+    searchOptions,
+    sortOptions
+  });
   const booleanFields = validation.booleanFields || [];
 
   const crud = createCrudModule(crudConfig, null, { ...routerConfig, validation, booleanFields });

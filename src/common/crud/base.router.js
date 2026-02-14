@@ -58,9 +58,11 @@ function baseRouter(controller, routeName = '', config = {}) {
   const v = validation && validation.middlewares ? validation.middlewares : {};
   const getRoles = (opName) => buildRoleMiddlewares(roles[opName]);
 
+  const flattenMiddleware = (mw) => Array.isArray(mw) ? mw : (mw ? [mw] : []);
+
   if (isEnabled('list')) router.get(
     '/',
-    ...(v.getAll ? [v.getAll] : []),
+    ...flattenMiddleware(v.getAll),
     ...getRoles('list'),
     controller.getAll
   );

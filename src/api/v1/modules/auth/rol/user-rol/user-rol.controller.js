@@ -21,7 +21,11 @@ class UserRolController {
 
 	getUserRolesWithDataLogin = async (req, res, next) => {
 		try {
-			const { data, pagination } = await this.service.getUserRolesWithDataLogin(req.pagination);
+			const { data, pagination } = await this.service.getUserRolesWithDataLogin({
+				pagination: req.pagination,
+				sort: req.sort,
+				search: req.search
+			});
 			return successPaginatedResponse(res, {
 				message: MESSAGES.GENERAL.SUCCESS.FETCH_SUCCESS,
 				data,

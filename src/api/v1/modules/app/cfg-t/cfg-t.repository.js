@@ -122,7 +122,110 @@ class CfgTRepository {
 		};
 	}
 
+	async findAllCfgAAndCfgE() {
+		const allCfgTs = await prisma.cfg_t.findMany({
+			include: {
+				ct_map: {
+					include: {
+						cat_t: true,
+						tipo: true
+					}
+				}
+			},
+			orderBy: { id: 'asc' },
+		});
+
+		const results = [];
+		for (const cfgT of allCfgTs) {
+			const [cfgAs, cfgEs] = await Promise.all([
+				prisma.cfg_a.findMany({
+					where: { cfg_t_id: cfgT.id },
+					include: { ca_map: { include: { aspecto: true } } },
+					orderBy: { orden: 'asc' },
+				}),
+				prisma.cfg_e.findMany({
+					where: { cfg_t_id: cfgT.id },
+					include: { ce_map: { include: { escala: true } } },
+					orderBy: { orden: 'asc' },
+				}),
+			]);
+
+			results.push({
+				es_evaluacion: cfgT.es_evaluacion,
+				es_cmt_gen: cfgT.es_cmt_gen,
+				es_cmt_gen_oblig: cfgT.es_cmt_gen_oblig,
+				tipo_evaluacion: cfgT.ct_map
+					? {
+							id: cfgT.ct_map.id,
+							categoria: cfgT.ct_map.cat_t
+								? {
+										id: cfgT.ct_map.cat_t.id,
+										nombre: cfgT.ct_map.cat_t.nombre,
+										descripcion: cfgT.ct_map.cat_t.descripcion || null,
+								  }
+								: null,
+							tipo: cfgT.ct_map.tipo
+								? {
+										id: cfgT.ct_map.tipo.id,
+										nombre: cfgT.ct_map.tipo.nombre,
+										descripcion: cfgT.ct_map.tipo.descripcion || null,
+								  }
+								: null,
+					  }
+					: null,
+				cfg_a: cfgAs.map(item => ({
+					id: item.id,
+					cfg_t_id: item.cfg_t_id,
+					aspecto_id: item.aspecto_id,
+					orden: item.orden,
+					es_activo: item.es_activo ?? true,
+					aspecto: item.ca_map?.aspecto
+						? {
+								id: item.ca_map.aspecto.id,
+								nombre: item.ca_map.aspecto.nombre,
+								descripcion: item.ca_map.aspecto.descripcion || null,
+						  }
+						: null,
+				})),
+				cfg_e: cfgEs.map(item => ({
+					id: item.id,
+					cfg_t_id: item.cfg_t_id,
+					escala_id: item.escala_id,
+					puntaje: item.puntaje,
+					orden: item.orden,
+					es_activo: item.es_activo ?? true,
+					escala: item.ce_map?.escala
+						? {
+								id: item.ce_map.escala.id,
+								sigla: item.ce_map.escala.sigla,
+								nombre: item.ce_map.escala.nombre,
+								descripcion: item.ce_map.escala.descripcion || null,
+						  }
+						: null,
+				})),
+			});
+		}
+
+		return results;
+	}
+
 	async findCfgAAndCfgEByCfgTId(cfgTId) {
+		const cfgT = await prisma.cfg_t.findUnique({
+			where: { id: cfgTId },
+			include: {
+				ct_map: {
+					include: {
+						cat_t: true,
+						tipo: true
+					}
+				}
+			}
+		});
+
+		if (!cfgT) {
+			return null;
+		}
+
 		const [cfgAs, cfgEs] = await Promise.all([
 			prisma.cfg_a.findMany({
 				where: { cfg_t_id: cfgTId },
@@ -137,6 +240,28 @@ class CfgTRepository {
 		]);
 
 		return {
+			es_evaluacion: cfgT.es_evaluacion,
+			es_cmt_gen: cfgT.es_cmt_gen,
+			es_cmt_gen_oblig: cfgT.es_cmt_gen_oblig,
+			tipo_evaluacion: cfgT.ct_map
+				? {
+						id: cfgT.ct_map.id,
+						categoria: cfgT.ct_map.cat_t
+							? {
+									id: cfgT.ct_map.cat_t.id,
+									nombre: cfgT.ct_map.cat_t.nombre,
+									descripcion: cfgT.ct_map.cat_t.descripcion || null,
+							  }
+							: null,
+						tipo: cfgT.ct_map.tipo
+							? {
+									id: cfgT.ct_map.tipo.id,
+									nombre: cfgT.ct_map.tipo.nombre,
+									descripcion: cfgT.ct_map.tipo.descripcion || null,
+							  }
+							: null,
+				  }
+				: null,
 			cfg_a: cfgAs.map(item => ({
 				id: item.id,
 				cfg_t_id: item.cfg_t_id,
@@ -170,14 +295,27 @@ class CfgTRepository {
 		};
 	}
 
-	async findCfgTListByUserRoles(userAppRoleIds = [], userAuthRoleIds = [], isAdmin = false, hasRole2 = false) {
+	async findCfgTListByUserRoles(userAppRoleIds = [], userAuthRoleIds = [], isAdmin = false, hasRole2 = false, search = {}, sort = {}) {
+		let results;
 		if (isAdmin) {
-			return this.#getAllCfgTs();
+			results = await this.#getAllCfgTs();
+		} else if (hasRole2) {
+			results = await this.#getAllActiveCfgTs();
+		} else {
+			results = await this.#getCfgTsByUserRoles(userAppRoleIds, userAuthRoleIds);
 		}
-		if (hasRole2) {
-			return this.#getAllActiveCfgTs();
+		
+		// Aplicar búsqueda
+		if (search?.isActive && search?.term) {
+			results = this.#applySearch(results, search);
 		}
-		return this.#getCfgTsByUserRoles(userAppRoleIds, userAuthRoleIds);
+		
+		// Aplicar ordenamiento
+		if (sort?.sortBy && sort?.sortOrder) {
+			results = this.#applySort(results, sort);
+		}
+		
+		return results;
 	}
 
 	async #getAllCfgTs() {
@@ -291,6 +429,52 @@ class CfgTRepository {
 				  }
 				: null,
 		};
+	}
+
+	#applySearch(results, search) {
+		const { term, fields, caseSensitive } = search;
+		const searchTerm = caseSensitive ? term : term.toLowerCase();
+		
+		return results.filter(item => {
+			// Buscar en nombre de categoría
+			const categoriaNombre = item.tipo_evaluacion?.categoria?.nombre || '';
+			const categoriaDesc = item.tipo_evaluacion?.categoria?.descripcion || '';
+			
+			// Buscar en nombre de tipo
+			const tipoNombre = item.tipo_evaluacion?.tipo?.nombre || '';
+			const tipoDesc = item.tipo_evaluacion?.tipo?.descripcion || '';
+			
+			const searchableText = caseSensitive
+				? `${categoriaNombre} ${categoriaDesc} ${tipoNombre} ${tipoDesc}`
+				: `${categoriaNombre} ${categoriaDesc} ${tipoNombre} ${tipoDesc}`.toLowerCase();
+			
+			return searchableText.includes(searchTerm);
+		});
+	}
+
+	#applySort(results, sort) {
+		const { sortBy, sortOrder } = sort;
+		const order = sortOrder === 'desc' ? -1 : 1;
+		
+		return [...results].sort((a, b) => {
+			let aVal, bVal;
+			
+			if (sortBy === 'nombre') {
+				// Ordenar por nombre de tipo de evaluación
+				aVal = a.tipo_evaluacion?.tipo?.nombre || '';
+				bVal = b.tipo_evaluacion?.tipo?.nombre || '';
+				return order * aVal.localeCompare(bVal);
+			} else if (sortBy === 'fecha_inicio') {
+				aVal = new Date(a.fecha_inicio || 0);
+				bVal = new Date(b.fecha_inicio || 0);
+				return order * (aVal - bVal);
+			} else {
+				// Por defecto ordenar por id
+				aVal = a.id || 0;
+				bVal = b.id || 0;
+				return order * (aVal - bVal);
+			}
+		});
 	}
 
 	async findRolesByCfgTId(cfgTId) {

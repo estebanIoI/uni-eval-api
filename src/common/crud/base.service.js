@@ -24,13 +24,24 @@ class BaseService {
     return clean;
   }
 
-  async getAll(pagination) {
-    if (!pagination) {
+  async getAll(options = {}) {
+    // Soportar firma legacy: getAll(pagination)
+    const pagination = options.pagination || options;
+    const sort = options.sort || null;
+    const search = options.search || null;
+
+    const hasPagination = pagination
+      && Number.isFinite(pagination.page)
+      && Number.isFinite(pagination.limit)
+      && Number.isFinite(pagination.skip);
+
+    if (!hasPagination) {
       const data = await this.repository.findAll();
       return { data };
     }
+
     const { skip, limit, page } = pagination;
-    const { items, total } = await this.repository.findPaginated({ skip, limit });
+    const { items, total } = await this.repository.findPaginated({ skip, limit, sort, search });
     const pages = Math.ceil(total / limit) || 1;
     return {
       data: items,

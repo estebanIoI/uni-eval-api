@@ -30,9 +30,7 @@ async function summaryByProgram(req, res, next) {
 
 async function docente(req, res, next) {
 	try {
-		const page = parseInt(req.query.page) || 1;
-		const limit = parseInt(req.query.limit) || 10;
-		const data = await service.docenteStats({ ...req.query, page, limit });
+		const data = await service.docenteStats({ ...req.query, page: req.pagination.page, limit: req.pagination.limit }, req.search, req.sort);
 		successResponse(res, {
 			code: 200,
 			message: messages.DASHBOARD.SUCCESS.FETCH_STATS,

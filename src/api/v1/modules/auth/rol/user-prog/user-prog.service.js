@@ -1,41 +1,12 @@
 const AppError = require('@utils/AppError');
 const MESSAGES = require('@constants/messages');
 
-class UserRolService {
+class UserProgService {
 	constructor(repository) {
 		this.repository = repository;
 	}
 
-	async getUserRolesWithName(pagination) {
-		if (!pagination) throw new AppError(MESSAGES.GENERAL.VALIDATION.INVALID_REQUEST, 400);
-
-		const { skip, limit, page } = pagination;
-		const { items, total } = await this.repository.findPaginatedWithRoleName({ skip, limit });
-		const pages = Math.ceil(total / limit) || 1;
-
-		const data = items.map((item) => ({
-			id: item.id,
-			user_id: item.user_id,
-			rol_id: item.rol_id,
-			rol_nombre: item.rol?.nombre ?? null,
-			fecha_creacion: item.fecha_creacion,
-			fecha_actualizacion: item.fecha_actualizacion
-		}));
-
-		return {
-			data,
-			pagination: {
-				page,
-				limit,
-				total,
-				pages,
-				hasNext: page < pages,
-				hasPrev: page > 1
-			}
-		};
-	}
-
-	async getUserRolesWithDataLogin(options = {}) {
+	async getUserProgWithDataLogin(options = {}) {
 		const { pagination, sort, search } = options;
 		if (!pagination) throw new AppError(MESSAGES.GENERAL.VALIDATION.INVALID_REQUEST, 400);
 
@@ -45,9 +16,9 @@ class UserRolService {
 
 		const data = items.map((item) => ({
 			id: item.id,
-			user_id: item.user_id,
-			rol_id: item.rol_id,
-			rol_nombre: item.rol?.nombre ?? null,
+			user_rol_id: item.user_rol_id,
+			prog_id: item.prog_id,
+			prog_nombre: item.prog?.nombre ?? null,
 			fecha_creacion: item.fecha_creacion,
 			fecha_actualizacion: item.fecha_actualizacion,
 			datalogin: item.datalogin ? {
@@ -74,4 +45,4 @@ class UserRolService {
 	}
 }
 
-module.exports = UserRolService;
+module.exports = UserProgService;
