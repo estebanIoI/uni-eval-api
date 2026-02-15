@@ -11,6 +11,25 @@ function buildVistaWhere({ sede, periodo, programa, semestre, grupo }) {
 	return where;
 }
 
+// Calculate the most frequent value in an array (mode)
+function getMostFrequent(values) {
+	if (!values || values.length === 0) return null;
+	const frequency = {};
+	let maxCount = 0;
+	let mostFrequent = null;
+	
+	for (const value of values) {
+		if (value == null) continue;
+		frequency[value] = (frequency[value] || 0) + 1;
+		if (frequency[value] > maxCount) {
+			maxCount = frequency[value];
+			mostFrequent = value;
+		}
+	}
+	
+	return mostFrequent;
+}
+
 async function computeEvaluationMetricsFromVista(vista, cfgId) {
 	const estudiantesSet = new Set(vista.map(v => v.ID_ESTUDIANTE).filter(Boolean));
 	const docentesSet = new Set(vista.map(v => v.ID_DOCENTE).filter(Boolean));
@@ -906,7 +925,7 @@ async function getDocenteMateriaMetrics({ cfg_t, docente, codigo_materia, sede, 
 	}
 	const cursos = await userPrisma.vista_academica_insitus.findMany({
 		where: whereVista,
-		select: { COD_ASIGNATURA: true, ASIGNATURA: true, ID_ESTUDIANTE: true, DOCENTE: true, GRUPO: true }
+		select: { COD_ASIGNATURA: true, ASIGNATURA: true, ID_ESTUDIANTE: true, DOCENTE: true, GRUPO: true, NOM_PROGRAMA: true, SEMESTRE: true }
 	});
 	if (!cursos.length) return { docente, materias: [] };
 
@@ -916,8 +935,17 @@ async function getDocenteMateriaMetrics({ cfg_t, docente, codigo_materia, sede, 
 	const byMateria = new Map();
 	for (const c of cursos) {
 		const key = String(c.COD_ASIGNATURA);
-		const entry = byMateria.get(key) || { codigo: key, nombre: c.ASIGNATURA || null, estudiantes: new Set(), byGrupo: new Map() };
+		const entry = byMateria.get(key) || { 
+			codigo: key, 
+			nombre: c.ASIGNATURA || null, 
+			estudiantes: new Set(), 
+			byGrupo: new Map(),
+			programas: [],
+			semestres: []
+		};
 		if (c.ID_ESTUDIANTE) entry.estudiantes.add(c.ID_ESTUDIANTE);
+		if (c.NOM_PROGRAMA) entry.programas.push(c.NOM_PROGRAMA);
+		if (c.SEMESTRE) entry.semestres.push(c.SEMESTRE);
 		
 		// Group by grupo within materia
 		const grupoKey = c.GRUPO || 'SIN_GRUPO';
@@ -929,7 +957,7 @@ async function getDocenteMateriaMetrics({ cfg_t, docente, codigo_materia, sede, 
 	}
 
 	const materias = [];
-	for (const { codigo, nombre, estudiantes, byGrupo } of byMateria.values()) {
+	for (const { codigo, nombre, estudiantes, byGrupo, programas, semestres } of byMateria.values()) {
 		// evals for docente + materia
 		const evals = await localPrisma.eval.findMany({
 			where: { id_configuracion: cfgId, docente, codigo_materia: codigo },
@@ -1058,6 +1086,8 @@ async function getDocenteMateriaMetrics({ cfg_t, docente, codigo_materia, sede, 
 		const materiaObj = {
 			codigo_materia: codigo,
 			nombre_materia: nombre,
+			nom_programa: getMostFrequent(programas),
+			semestre: getMostFrequent(semestres),
 			total_evaluaciones: totalEvaluaciones,
 			total_realizadas: totalRealizadas,
 			total_pendientes: totalPendientes,

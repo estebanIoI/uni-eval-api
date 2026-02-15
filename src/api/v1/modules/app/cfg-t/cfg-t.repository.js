@@ -1,5 +1,24 @@
 const { prisma, userPrisma } = require('@config/prisma');
 
+// Calculate the most frequent value in an array (mode)
+function getMostFrequent(values) {
+	if (!values || values.length === 0) return null;
+	const frequency = {};
+	let maxCount = 0;
+	let mostFrequent = null;
+	
+	for (const value of values) {
+		if (value == null) continue;
+		frequency[value] = (frequency[value] || 0) + 1;
+		if (frequency[value] > maxCount) {
+			maxCount = frequency[value];
+			mostFrequent = value;
+		}
+	}
+	
+	return mostFrequent;
+}
+
 class CfgTRepository {
 	async findAspectosEscalasByCfgTId(cfgTId) {
 		// Fetch cfg_t data for configuration flags and tipo_evaluacion
@@ -547,7 +566,7 @@ class CfgTRepository {
 
 		if (pairs.length === 0) return results;
 
-		// Query vista_academica_insitus to get names
+		// Query vista_academica_insitus to get names, programa, and semestre
 		const vistaData = await userPrisma.vista_academica_insitus.findMany({
 			where: {
 				OR: pairs.map(p => ({
@@ -559,29 +578,39 @@ class CfgTRepository {
 				ID_DOCENTE: true,
 				DOCENTE: true,
 				COD_ASIGNATURA: true,
-				ASIGNATURA: true
-			},
-			distinct: ['ID_DOCENTE', 'COD_ASIGNATURA']
+				ASIGNATURA: true,
+				NOM_PROGRAMA: true,
+				SEMESTRE: true
+			}
 		});
 
-		// Create a lookup map
+		// Create a lookup map with aggregated data (programa, semestre)
 		const lookupMap = new Map();
 		vistaData.forEach(v => {
 			const key = `${v.ID_DOCENTE}_${v.COD_ASIGNATURA}`;
-			lookupMap.set(key, {
-				nombre_docente: v.DOCENTE,
-				nombre_materia: v.ASIGNATURA
-			});
+			if (!lookupMap.has(key)) {
+				lookupMap.set(key, {
+					nombre_docente: v.DOCENTE,
+					nombre_materia: v.ASIGNATURA,
+					programas: [],
+					semestres: []
+				});
+			}
+			const entry = lookupMap.get(key);
+			if (v.NOM_PROGRAMA) entry.programas.push(v.NOM_PROGRAMA);
+			if (v.SEMESTRE) entry.semestres.push(v.SEMESTRE);
 		});
 
-		// Enrich results with names
+		// Enrich results with names and most frequent programa/semestre
 		return results.map(r => {
 			const key = `${r.docente}_${r.codigo_materia}`;
-			const names = lookupMap.get(key);
+			const data = lookupMap.get(key);
 			return {
 				...r,
-				nombre_docente: names?.nombre_docente || null,
-				nombre_materia: names?.nombre_materia || null
+				nombre_docente: data?.nombre_docente || null,
+				nombre_materia: data?.nombre_materia || null,
+				nom_programa: getMostFrequent(data?.programas) || null,
+				semestre: getMostFrequent(data?.semestres) || null
 			};
 		});
 	}
