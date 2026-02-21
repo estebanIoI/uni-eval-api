@@ -17,7 +17,7 @@ router.get('/r',
 );
 
 // GET /cfg/t/:id/a-e -> aspectos y escalas relacionados via a_e
-router.get('/:id/a-e', ensureAuth, requireAuthRoles(1), controller.getAspectosEscalas);
+router.get('/:id/a-e', ensureAuth, requireAuthRoles(1, 2), controller.getAspectosEscalas);
 
 // GET /cfg/t/cfg-a_cfg-e -> todas las configuraciones de cfg_a y cfg_e
 router.get('/cfg-a_cfg-e', ensureAuth, requireAuthorization(), controller.getCfgAAndCfgE);

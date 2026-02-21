@@ -13,7 +13,10 @@ class EvalRepository {
 	getConfigWithType(configId) {
 		return this.cfgModel.findUnique({
 			where: { id: Number(configId) },
-			include: { ct_map: { include: { tipo: true } } }
+			include: { 
+				tipo_form: { select: { id: true, nombre: true } },
+				ct_map: { include: { tipo: true } } 
+			}
 		});
 	}
 

@@ -14,17 +14,11 @@
  *       properties:
  *         id:
  *           type: integer
- *         tipo_evaluacion_id:
+ *         tipo_id:
+ *           type: integer
+ *         tipo_form_id:
  *           type: integer
  *         fecha_inicio:
- *           type: string
- *           format: date
- *         fecha_fin:
- *           type: string
- *           format: date
- *         es_evaluacion:
- *           type: boolean
- *         es_cmt_gen:
  *           type: boolean
  *         es_cmt_gen_oblig:
  *           type: boolean
@@ -192,8 +186,8 @@
  *     CfgACfgEItem:
  *       type: object
  *       properties:
- *         es_evaluacion:
- *           type: boolean
+ *         tipo_form_id:
+ *           type: integer
  *         es_cmt_gen:
  *           type: boolean
  *         es_cmt_gen_oblig:

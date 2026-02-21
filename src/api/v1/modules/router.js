@@ -2,8 +2,9 @@ const { Router } = require('express');
 const router = Router();
 
 // Tipo
-const { tipo, catT, cfgT, catTmap, cfg_t_rol } = require('./app/t-a-e/tipo.crud');
+const { tipo, catT, tipo_form, cfgT, catTmap, cfg_t_rol } = require('./app/t-a-e/tipo.crud');
 const cfgTCustom = require('./app/cfg-t/cfg-t.router');
+router.use('/tipo/form', tipo_form.router);
 router.use('/tipo', tipo.router);
 router.use('/cat/t', catTmap.router, catT.router);
 router.use('/cfg/t', cfgTCustom, cfgT.router);

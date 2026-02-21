@@ -45,6 +45,27 @@ const catT = createValidatedCrud(
   },
 );
 
+const tipo_form = createValidatedCrud(
+  {
+    name: 'tipo_form',
+    route: '/tipo/form',
+    displayName: 'Tipo Formulario',
+    schemaName: 'TipoFormulario',
+  },
+  {
+    rules: {
+      nombre: {
+        alphaNumericSpanish: true,
+        stringLength: { min: 1, max: 100 }
+      },
+      descripcion: {
+        alphaNumericSpanish: true,
+        stringLength: { min: 1, max: 500 }
+      }
+    }
+  },
+);
+
 const cfgT = createValidatedCrud(
   {
     name: 'cfg_t',
@@ -88,6 +109,7 @@ const catTmap = createRelationsModule({
 module.exports = {
   tipo,
   catT,
+  tipo_form,
   cfgT,
   cfg_t_rol,
   catTmap,

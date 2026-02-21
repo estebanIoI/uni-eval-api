@@ -25,7 +25,9 @@ class CfgTRepository {
 		const cfgT = await prisma.cfg_t.findUnique({
 			where: { id: cfgTId },
 			select: {
-				es_evaluacion: true,
+				tipo_form: {
+					select: { id: true, nombre: true }
+				},
 				es_cmt_gen: true,
 				es_cmt_gen_oblig: true,
 				ct_map: {
@@ -115,7 +117,7 @@ class CfgTRepository {
 		}
 
 		return {
-			es_evaluacion: cfgT?.es_evaluacion ?? null,
+			tipo_form: cfgT?.tipo_form ?? null,
 			es_cmt_gen: cfgT?.es_cmt_gen ?? null,
 			es_cmt_gen_oblig: cfgT?.es_cmt_gen_oblig ?? null,
 			tipo_evaluacion: cfgT?.ct_map
@@ -144,6 +146,9 @@ class CfgTRepository {
 	async findAllCfgAAndCfgE() {
 		const allCfgTs = await prisma.cfg_t.findMany({
 			include: {
+				tipo_form: {
+					select: { id: true, nombre: true }
+				},
 				ct_map: {
 					include: {
 						cat_t: true,
@@ -170,7 +175,7 @@ class CfgTRepository {
 			]);
 
 			results.push({
-				es_evaluacion: cfgT.es_evaluacion,
+			tipo_form: cfgT.tipo_form,
 				es_cmt_gen: cfgT.es_cmt_gen,
 				es_cmt_gen_oblig: cfgT.es_cmt_gen_oblig,
 				tipo_evaluacion: cfgT.ct_map
@@ -232,6 +237,9 @@ class CfgTRepository {
 		const cfgT = await prisma.cfg_t.findUnique({
 			where: { id: cfgTId },
 			include: {
+				tipo_form: {
+					select: { id: true, nombre: true }
+				},
 				ct_map: {
 					include: {
 						cat_t: true,
@@ -259,7 +267,7 @@ class CfgTRepository {
 		]);
 
 		return {
-			es_evaluacion: cfgT.es_evaluacion,
+			tipo_form: cfgT.tipo_form,
 			es_cmt_gen: cfgT.es_cmt_gen,
 			es_cmt_gen_oblig: cfgT.es_cmt_gen_oblig,
 			tipo_evaluacion: cfgT.ct_map
@@ -340,6 +348,9 @@ class CfgTRepository {
 	async #getAllCfgTs() {
 		const allCfgTs = await prisma.cfg_t.findMany({
 			include: {
+				tipo_form: {
+					select: { id: true, nombre: true }
+				},
 				ct_map: {
 					include: {
 						cat_t: true,
@@ -349,13 +360,16 @@ class CfgTRepository {
 			},
 			orderBy: { fecha_actualizacion: 'desc' },
 		});
-		return allCfgTs.map(cfgT => this.#mapCfgT(cfgT));
+		return this.#enrichCfgTsWithRoles(allCfgTs);
 	}
 
 	async #getAllActiveCfgTs() {
 		const activeCfgTs = await prisma.cfg_t.findMany({
 			where: { es_activo: true },
 			include: {
+				tipo_form: {
+					select: { id: true, nombre: true }
+				},
 				ct_map: {
 					include: {
 						cat_t: true,
@@ -365,7 +379,7 @@ class CfgTRepository {
 			},
 			orderBy: { fecha_actualizacion: 'desc' },
 		});
-		return activeCfgTs.map(cfgT => this.#mapCfgT(cfgT));
+		return this.#enrichCfgTsWithRoles(activeCfgTs);
 	}
 
 	async #getCfgTsByUserRoles(userAppRoleIds = [], userAuthRoleIds = []) {
@@ -373,6 +387,9 @@ class CfgTRepository {
 			include: {
 				cfg_t: {
 					include: {
+						tipo_form: {
+							select: { id: true, nombre: true }
+						},
 						ct_map: {
 							include: {
 								cat_t: true,
@@ -419,10 +436,10 @@ class CfgTRepository {
 	#mapCfgT(cfgT) {
 		return {
 			id: cfgT.id,
-			tipo_evaluacion_id: cfgT.tipo_evaluacion_id,
+			tipo_id: cfgT.tipo_id,
+			tipo_form: cfgT.tipo_form,
 			fecha_inicio: cfgT.fecha_inicio,
 			fecha_fin: cfgT.fecha_fin,
-			es_evaluacion: cfgT.es_evaluacion,
 			es_cmt_gen: cfgT.es_cmt_gen,
 			es_cmt_gen_oblig: cfgT.es_cmt_gen_oblig,
 			es_activo: cfgT.es_activo,
@@ -448,6 +465,36 @@ class CfgTRepository {
 				  }
 				: null,
 		};
+	}
+
+	async #enrichCfgTsWithRoles(cfgTs) {
+		// Obtener todos los roles requeridos para todos los cfg_ts
+		const cfgTIds = cfgTs.map(c => c.id);
+		const cfgTRoles = await prisma.cfg_t_rol.findMany({
+			where: { cfg_t_id: { in: cfgTIds } },
+			include: { rol_mix: true },
+		});
+
+		// Crear un mapa de roles por cfg_t_id
+		const rolesMap = new Map();
+		for (const cfgTRole of cfgTRoles) {
+			if (!rolesMap.has(cfgTRole.cfg_t_id)) {
+				rolesMap.set(cfgTRole.cfg_t_id, []);
+			}
+			if (cfgTRole.rol_mix) {
+				rolesMap.get(cfgTRole.cfg_t_id).push({
+					rol_mix_id: cfgTRole.rol_mix.id,
+					rol_origen_id: cfgTRole.rol_mix.rol_origen_id,
+					origen: cfgTRole.rol_mix.origen,
+				});
+			}
+		}
+
+		// Enriquecer cada cfg_t con sus roles requeridos
+		return cfgTs.map(cfgT => ({
+			...this.#mapCfgT(cfgT),
+			rolesRequeridos: rolesMap.get(cfgT.id) || [],
+		}));
 	}
 
 	#applySearch(results, search) {
@@ -524,7 +571,6 @@ class CfgTRepository {
 			where.estudiante = userId;
 		} else if (isDocente) {
 			where.docente = userId;
-			where.cfg_t = { is: { es_evaluacion: false } };
 		} else {
 			return [];
 		}
@@ -537,7 +583,7 @@ class CfgTRepository {
 				estudiante: true,
 				docente: true,
 				codigo_materia: true,
-				cfg_t: { select: { es_evaluacion: true } },
+			cfg_t: { select: { tipo_form: { select: { id: true, nombre: true } } } },
 				eval_det: { select: { id: true }, take: 1 },
 			},
 			orderBy: { id: 'asc' },
@@ -549,7 +595,7 @@ class CfgTRepository {
 			estudiante: row.estudiante,
 			docente: row.docente,
 			codigo_materia: row.codigo_materia,
-			es_evaluacion: row.cfg_t?.es_evaluacion ?? null,
+			tipo_form: row.cfg_t?.tipo_form ?? null,
 			es_finalizada: row.eval_det && row.eval_det.length > 0,
 		}));
 
@@ -559,23 +605,45 @@ class CfgTRepository {
 	async enrichWithNames(results) {
 		if (!results || results.length === 0) return results;
 
-		// Collect unique docente-materia pairs
-		const pairs = results
+		// Collect unique pairs for lookup
+		// For evaluations: docente + codigo_materia
+		// For student self-evaluation: estudiante + codigo_materia
+		const docentePairs = results
 			.filter(r => r.docente && r.codigo_materia)
 			.map(r => ({ docente: r.docente, codigo: parseInt(r.codigo_materia) }));
 
-		if (pairs.length === 0) return results;
+		const estudiantePairs = results
+			.filter(r => r.estudiante && r.codigo_materia && !r.docente)
+			.map(r => ({ estudiante: r.estudiante, codigo: parseInt(r.codigo_materia) }));
+
+		if (docentePairs.length === 0 && estudiantePairs.length === 0) return results;
 
 		// Query vista_academica_insitus to get names, programa, and semestre
+		const whereConditions = [];
+		
+		// Add conditions for docente-materia pairs
+		if (docentePairs.length > 0) {
+			whereConditions.push(...docentePairs.map(p => ({
+				ID_DOCENTE: p.docente,
+				COD_ASIGNATURA: p.codigo
+			})));
+		}
+
+		// Add conditions for estudiante-materia pairs
+		if (estudiantePairs.length > 0) {
+			whereConditions.push(...estudiantePairs.map(p => ({
+				ID_ESTUDIANTE: p.estudiante,
+				COD_ASIGNATURA: p.codigo
+			})));
+		}
+
 		const vistaData = await userPrisma.vista_academica_insitus.findMany({
 			where: {
-				OR: pairs.map(p => ({
-					ID_DOCENTE: p.docente,
-					COD_ASIGNATURA: p.codigo
-				}))
+				OR: whereConditions
 			},
 			select: {
 				ID_DOCENTE: true,
+				ID_ESTUDIANTE: true,
 				DOCENTE: true,
 				COD_ASIGNATURA: true,
 				ASIGNATURA: true,
@@ -584,27 +652,60 @@ class CfgTRepository {
 			}
 		});
 
-		// Create a lookup map with aggregated data (programa, semestre)
-		const lookupMap = new Map();
+		// Create lookup maps
+		// Key format: "docente_codigo" or "estudiante_codigo"
+		const lookupMapDocente = new Map();
+		const lookupMapEstudiante = new Map();
+		
 		vistaData.forEach(v => {
-			const key = `${v.ID_DOCENTE}_${v.COD_ASIGNATURA}`;
-			if (!lookupMap.has(key)) {
-				lookupMap.set(key, {
-					nombre_docente: v.DOCENTE,
-					nombre_materia: v.ASIGNATURA,
-					programas: [],
-					semestres: []
-				});
+			// For docente-materia pairs
+			if (v.ID_DOCENTE && v.COD_ASIGNATURA) {
+				const key = `${v.ID_DOCENTE}_${v.COD_ASIGNATURA}`;
+				if (!lookupMapDocente.has(key)) {
+					lookupMapDocente.set(key, {
+						nombre_docente: v.DOCENTE,
+						nombre_materia: v.ASIGNATURA,
+						programas: [],
+						semestres: []
+					});
+				}
+				const entry = lookupMapDocente.get(key);
+				if (v.NOM_PROGRAMA) entry.programas.push(v.NOM_PROGRAMA);
+				if (v.SEMESTRE) entry.semestres.push(v.SEMESTRE);
 			}
-			const entry = lookupMap.get(key);
-			if (v.NOM_PROGRAMA) entry.programas.push(v.NOM_PROGRAMA);
-			if (v.SEMESTRE) entry.semestres.push(v.SEMESTRE);
+
+			// For estudiante-materia pairs (self-evaluation)
+			if (v.ID_ESTUDIANTE && v.COD_ASIGNATURA) {
+				const key = `${v.ID_ESTUDIANTE}_${v.COD_ASIGNATURA}`;
+				if (!lookupMapEstudiante.has(key)) {
+					lookupMapEstudiante.set(key, {
+						nombre_docente: v.DOCENTE, // Still include docente name for context
+						nombre_materia: v.ASIGNATURA,
+						programas: [],
+						semestres: []
+					});
+				}
+				const entry = lookupMapEstudiante.get(key);
+				if (v.NOM_PROGRAMA) entry.programas.push(v.NOM_PROGRAMA);
+				if (v.SEMESTRE) entry.semestres.push(v.SEMESTRE);
+			}
 		});
 
 		// Enrich results with names and most frequent programa/semestre
 		return results.map(r => {
-			const key = `${r.docente}_${r.codigo_materia}`;
-			const data = lookupMap.get(key);
+			let data = null;
+
+			// Try to find data by docente + codigo_materia
+			if (r.docente && r.codigo_materia) {
+				const key = `${r.docente}_${r.codigo_materia}`;
+				data = lookupMapDocente.get(key);
+			}
+			// If not found, try by estudiante + codigo_materia (self-evaluation)
+			else if (r.estudiante && r.codigo_materia) {
+				const key = `${r.estudiante}_${r.codigo_materia}`;
+				data = lookupMapEstudiante.get(key);
+			}
+
 			return {
 				...r,
 				nombre_docente: data?.nombre_docente || null,
