@@ -1,0 +1,46 @@
+services:
+  mysql-local:
+    image: mysql:8
+    container_name: mysql-local
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-app}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 👇 Esto ejecuta tu SQL automáticamente al crear el contenedor
+      - ./SQL/docker-init.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - eval-network
+
+  backend:
+    build: .
+    container_name: eval-api
+    restart: always
+    depends_on:
+      mysql-local:
+        condition: service_healthy
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "mysql://root:${DB_ROOT_PASSWORD:-root}@mysql-local:3306/${DB_NAME:-app}"
+    networks:
+      - eval-network
+
+volumes:
+  mysql_data:
+
+networks:
+  eval-network:
+    driver: bridge
+    external: true
