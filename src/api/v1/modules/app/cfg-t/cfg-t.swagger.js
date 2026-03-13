@@ -250,6 +250,9 @@
  *     RolMix:
  *       type: object
  *       properties:
+ *         id:
+ *           type: integer
+ *           description: ID del registro en cfg_t_rol
  *         rol_mix_id:
  *           type: integer
  *           nullable: true
@@ -343,6 +346,7 @@
  *         schema:
  *           type: string
  *           enum: [asc, desc]
+ *           default: desc
  *         description: Orden de clasificación (ascendente o descendente)
  *         example: "desc"
  *     responses:

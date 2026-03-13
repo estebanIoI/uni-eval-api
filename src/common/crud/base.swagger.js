@@ -124,7 +124,7 @@ function buildCrudDocs(nameOrOptions, schema) {
         { in: "query", name: "page", schema: { type: "integer", default: 1 }, description: "Número de página" },
         { in: "query", name: "limit", schema: { type: "integer", default: 10 }, description: "Registros por página" },
         { in: "query", name: "sortBy", schema: { type: "string", default: "id" }, description: "Campo para ordenar" },
-        { in: "query", name: "sortOrder", schema: { type: "string", enum: ["asc", "desc"], default: "asc" }, description: "Orden (asc o desc)" },
+        { in: "query", name: "sortOrder", schema: { type: "string", enum: ["asc", "desc"], default: "desc" }, description: "Orden (asc o desc)" },
         { in: "query", name: "search", schema: { type: "string" }, description: "Término de búsqueda (también acepta 'q')" },
       ],
       responses: {

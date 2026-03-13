@@ -1,7 +1,7 @@
 const sort = (options = {}) => {
   const {
     defaultSortBy = 'id',
-    defaultSortOrder = 'asc',
+    defaultSortOrder = 'desc',
     allowedFields = [],
   } = options;
 

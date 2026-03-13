@@ -8,6 +8,8 @@ function buildVistaWhere({ sede, periodo, programa, semestre, grupo }) {
 	if (programa) where.NOM_PROGRAMA = programa;
 	if (semestre) where.SEMESTRE = semestre;
 	if (grupo) where.GRUPO = grupo;
+	// Excluir docente sin asignar
+	where.NOT = { DOCENTE: 'DOCENTE SIN ASIGNAR' };
 	return where;
 }
 
@@ -638,7 +640,7 @@ async function getRanking({ cfg_t, sede, periodo, programa, semestre, grupo }) {
 	for (const [docente, info] of byDocente.entries()) {
 		const evals = await localPrisma.eval.findMany({ where: { id_configuracion: cfgId, docente }, select: { id: true } });
 		const evalIds = evals.map(e => e.id);
-		const detalles = evalIds.length ? await localPrisma.eval_det.findMany({ where: { eval_id: { in: evalIds } }, select: { a_e_id: true } }) : [];
+		const detalles = evalIds.length ? await localPrisma.eval_det.findMany({ where: { eval_id: { in: evalIds } }, select: { a_e_id: true, eval_id: true } }) : [];
 		const aeIds = Array.from(new Set(detalles.map(d => d.a_e_id)));
 		let avg = null;
 		let suma = 0;
@@ -687,7 +689,9 @@ async function getRanking({ cfg_t, sede, periodo, programa, semestre, grupo }) {
 			notaFinalPonderada = ponderadoEstudiantes + ponderadoAutoevaluacion;
 		}
 
-		const v = evalIds.length; // number of evaluations completed for docente
+		// Only count evaluations that have at least one response
+		const uniqueEvalIds = new Set(detalles.map(d => d.eval_id));
+		const v = uniqueEvalIds.size; // number of evaluations with responses
 		// Use nota_final_ponderada if available, otherwise use avg for Bayesian adjustment
 		const scoreForBayesian = notaFinalPonderada != null ? notaFinalPonderada : (avg ?? 0);
 		const bayesian = avg == null && !autoevaluacion ? 0 : (v / (v + m)) * scoreForBayesian + (m / (v + m)) * globalAvg;

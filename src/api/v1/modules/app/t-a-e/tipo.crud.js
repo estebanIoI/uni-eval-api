@@ -104,6 +104,17 @@ const catTmap = createRelationsModule({
   categoryPathBase: '/cat/t',
   itemSchemaName: 'tipo',
   categorySchemaName: 'CategoriaTipo',
+  searchFields: ['nombre', 'descripcion'],
+  sortableFields: ['id', 'nombre', 'descripcion', 'fecha_creacion', 'fecha_actualizacion'],
+  sortOptions: {
+    allowedFields: ['id', 'map_id', 'nombre', 'descripcion', 'fecha_creacion', 'fecha_actualizacion'],
+    defaultSortBy: 'id',
+    defaultSortOrder: 'desc',
+  },
+  paginationOptions: {
+    defaultLimit: 10,
+    maxLimit: 100,
+  }
 });
 
 module.exports = {

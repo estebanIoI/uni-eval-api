@@ -74,6 +74,17 @@ const catEmap = createRelationsModule({
   categoryPathBase: '/cat/e',
   itemSchemaName: 'escala',
   categorySchemaName: 'CategoriaEscala',
+  searchFields: ['sigla', 'nombre', 'descripcion'],
+  sortableFields: ['id', 'sigla', 'nombre', 'descripcion', 'fecha_creacion', 'fecha_actualizacion'],
+  sortOptions: {
+    allowedFields: ['id', 'map_id', 'sigla', 'nombre', 'descripcion', 'fecha_creacion', 'fecha_actualizacion'],
+    defaultSortBy: 'id',
+    defaultSortOrder: 'desc',
+  },
+  paginationOptions: {
+    defaultLimit: 10,
+    maxLimit: 100,
+  }
 });
 
 module.exports = {

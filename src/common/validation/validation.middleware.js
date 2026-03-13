@@ -214,7 +214,7 @@ function validatePagination(options = {}) {
     sortOrder: {
       type: 'string',
       enum: ['asc', 'desc'],
-      default: 'asc'
+      default: 'desc'
     }
   };
 
@@ -233,7 +233,7 @@ function validatePagination(options = {}) {
     // Aplicar defaults
     req.query.page = parseInt(req.query.page) || 1;
     req.query.limit = parseInt(req.query.limit) || defaultLimit;
-    req.query.sortOrder = req.query.sortOrder || 'asc';
+    req.query.sortOrder = req.query.sortOrder || 'desc';
 
     // Limitar
     if (req.query.limit > maxLimit) {

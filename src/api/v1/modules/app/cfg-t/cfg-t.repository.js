@@ -322,7 +322,7 @@ class CfgTRepository {
 		};
 	}
 
-	async findCfgTListByUserRoles(userAppRoleIds = [], userAuthRoleIds = [], isAdmin = false, hasRole2 = false, search = {}, sort = {}) {
+	async findCfgTListByUserRoles(userAppRoleIds = [], userAuthRoleIds = [], isAdmin = false, hasRole2 = false, isEstudiante = false, search = {}, sort = {}) {
 		let results;
 		if (isAdmin) {
 			results = await this.#getAllCfgTs();
@@ -330,6 +330,16 @@ class CfgTRepository {
 			results = await this.#getAllActiveCfgTs();
 		} else {
 			results = await this.#getCfgTsByUserRoles(userAppRoleIds, userAuthRoleIds);
+		}
+
+		if (isEstudiante) {
+			const now = new Date();
+			results = results.filter(item => {
+				if (!item?.fecha_fin) return true;
+				const fechaFin = new Date(item.fecha_fin);
+				if (Number.isNaN(fechaFin.getTime())) return true;
+				return fechaFin >= now;
+			});
 		}
 		
 		// Aplicar búsqueda
@@ -550,6 +560,7 @@ class CfgTRepository {
 		});
 
 		return cfgTRoles.map(cfgTRol => ({
+			id: cfgTRol.id,
 			rol_mix_id: cfgTRol.rol_mix?.id ?? null,
 			rol_origen_id: cfgTRol.rol_mix?.rol_origen_id ?? null,
 			nombre: cfgTRol.rol_mix?.nombre ?? null,

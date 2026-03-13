@@ -12,7 +12,7 @@ router.get('/r',
   ensureAuth, 
   requireAuthorization(), 
   search({ searchFields: ['nombre', 'descripcion'], minLength: 2 }),
-  sort({ defaultSortBy: 'id', defaultSortOrder: 'asc', allowedFields: ['id', 'nombre', 'fecha_inicio'] }),
+  sort({ defaultSortBy: 'id', defaultSortOrder: 'desc', allowedFields: ['id', 'nombre', 'fecha_inicio'] }),
   controller.getCfgTList
 );
 

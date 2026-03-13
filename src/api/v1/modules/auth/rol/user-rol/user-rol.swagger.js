@@ -110,7 +110,7 @@
  *         schema:
  *           type: string
  *           enum: [asc, desc]
- *           default: asc
+ *           default: desc
  *         description: Orden ascendente o descendente
  *       - in: query
  *         name: search

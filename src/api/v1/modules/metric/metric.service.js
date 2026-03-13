@@ -88,7 +88,10 @@ async function docenteComments(query) {
     if (query.docente) {
         try {
             const docente = await userPrisma.vista_academica_insitus.findFirst({
-                where: { ID_DOCENTE: String(query.docente) },
+                where: { 
+                    ID_DOCENTE: String(query.docente),
+                    NOT: { DOCENTE: 'DOCENTE SIN ASIGNAR' }
+                },
                 select: { DOCENTE: true, ID_DOCENTE: true }
             });
             

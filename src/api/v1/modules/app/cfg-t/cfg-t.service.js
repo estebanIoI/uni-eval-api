@@ -22,8 +22,10 @@ class CfgTService {
 		const userAppRoleIds = user?.rolesAppIds || [];
 		const userAuthRoleIds = user?.rolesAuthIds || [];
 		const isAdmin = hasGlobalRole(user);
-		const isDocente = userAuthRoleIds.includes(2);
-		return this.repository.findCfgTListByUserRoles(userAppRoleIds, userAuthRoleIds, isAdmin, isDocente, search, sort);
+		const authRoleIdsSet = new Set((userAuthRoleIds || []).map(String));
+		const isDocente = authRoleIdsSet.has('2');
+		const isEstudiante = authRoleIdsSet.has('1');
+		return this.repository.findCfgTListByUserRoles(userAppRoleIds, userAuthRoleIds, isAdmin, isDocente, isEstudiante, search, sort);
 	}
 
 	getRolesByCfgT(cfgTId) {
