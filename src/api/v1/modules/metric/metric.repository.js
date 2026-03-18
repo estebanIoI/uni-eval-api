@@ -829,6 +829,8 @@ async function getAutoevaluacionMetrics(docenteId) {
 // Helper function to get autoevaluacion metrics for multiple docentes
 async function getAutoevaluacionMetricsForDocentes(docentesList) {
 	if (!docentesList || !docentesList.length) return null;
+	const uniqueDocentes = Array.from(new Set(docentesList.filter(Boolean).map(String)));
+	if (!uniqueDocentes.length) return null;
 
 	const cfgT = await localPrisma.cfg_t.findFirst({
 		where: {
@@ -840,57 +842,85 @@ async function getAutoevaluacionMetricsForDocentes(docentesList) {
 
 	if (!cfgT) return null;
 
-	const evals = await localPrisma.eval.findMany({
-		where: {
-			id_configuracion: cfgT.id,
-			docente: { in: docentesList }
-		},
-		select: { id: true }
-	});
-	const evalIds = evals.map(e => e.id);
-
-	if (!evalIds.length) return null;
-
-	const detalles = await localPrisma.eval_det.findMany({
-		where: { eval_id: { in: evalIds } },
-		select: { a_e_id: true }
-	});
-	const aeIds = Array.from(new Set(detalles.map(d => d.a_e_id)));
-
-	if (!aeIds.length) return null;
-
-	// Map a_e -> real aspecto and escala_id
-	const aeRecords = await localPrisma.a_e.findMany({
-		where: { id: { in: aeIds } },
+	// Aspectos esperados para la autoevaluación activa
+	const cfgARecords = await localPrisma.cfg_a.findMany({
+		where: { cfg_t_id: cfgT.id },
 		include: {
-			cfg_a: {
+			ca_map: {
 				include: {
-					ca_map: {
-						include: {
-							aspecto: true
-						}
-					}
+					aspecto: true
 				}
 			}
 		}
 	});
+	const expectedAspectos = cfgARecords
+		.map((r) => r.ca_map?.aspecto)
+		.filter((asp) => asp && asp.id)
+		.reduce((acc, asp) => {
+			if (!acc.some((x) => x.id === asp.id)) {
+				acc.push({ id: asp.id, nombre: asp.nombre });
+			}
+			return acc;
+		}, []);
+
+	const evals = await localPrisma.eval.findMany({
+		where: {
+			id_configuracion: cfgT.id,
+			docente: { in: uniqueDocentes }
+		},
+		select: { id: true, docente: true }
+	});
+	const evalIds = evals.map(e => e.id);
+	const docenteByEvalId = new Map(evals.map((e) => [e.id, String(e.docente)]));
+
+	const detalles = await localPrisma.eval_det.findMany({
+		where: { eval_id: { in: evalIds } },
+		select: { a_e_id: true, eval_id: true }
+	});
+	const aeIds = Array.from(new Set(detalles.map(d => d.a_e_id)));
+
+	// Map a_e -> real aspecto and escala_id
+	const aeRecords = aeIds.length
+		? await localPrisma.a_e.findMany({
+			where: { id: { in: aeIds } },
+			include: {
+				cfg_a: {
+					include: {
+						ca_map: {
+							include: {
+								aspecto: true
+							}
+						}
+					}
+				}
+			}
+		})
+		: [];
 
 	// Store the actual aspecto object (id and name) mapped by a_e.id
 	const aspectoByAe = new Map(aeRecords.map(r => [r.id, r.cfg_a?.ca_map?.aspecto]));
 	const escalaByAe = new Map(aeRecords.map(r => [r.id, r.escala_id]));
 
 	const cfgEIds = Array.from(new Set(aeRecords.map(r => r.escala_id).filter(Boolean)));
-	const cfgE = await localPrisma.cfg_e.findMany({
-		where: { id: { in: cfgEIds } },
-		select: { id: true, puntaje: true }
-	});
+	const cfgE = cfgEIds.length
+		? await localPrisma.cfg_e.findMany({
+			where: { id: { in: cfgEIds } },
+			select: { id: true, puntaje: true }
+		})
+		: [];
 	const puntajeByEscala = new Map(cfgE.map(c => [c.id, Number(c.puntaje)]));
 
 	// Aggregate per real aspecto
 	const agg = new Map();
+	for (const asp of expectedAspectos) {
+		agg.set(asp.id, { aspecto_id: asp.id, nombre: asp.nombre, count: 0, sum: 0 });
+	}
+	const docentesConRespuestas = new Set();
 	for (const d of detalles) {
 		const asp = aspectoByAe.get(d.a_e_id); // This is the actual aspecto record
 		if (!asp) continue;
+		const docenteId = docenteByEvalId.get(d.eval_id);
+		if (docenteId) docentesConRespuestas.add(docenteId);
 		const escala = escalaByAe.get(d.a_e_id);
 		const puntaje = escala ? puntajeByEscala.get(escala) : undefined;
 		const entry = agg.get(asp.id) || { aspecto_id: asp.id, nombre: asp.nombre, count: 0, sum: 0 };
@@ -901,12 +931,23 @@ async function getAutoevaluacionMetricsForDocentes(docentesList) {
 		agg.set(asp.id, entry);
 	}
 
+	// Docentes que no respondieron autoevaluación: cuentan como respuesta en 0.0 por aspecto
+	const docentesSinRespuesta = uniqueDocentes.filter((docId) => !docentesConRespuestas.has(docId));
+	if (docentesSinRespuesta.length > 0 && expectedAspectos.length > 0) {
+		for (const asp of expectedAspectos) {
+			const entry = agg.get(asp.id) || { aspecto_id: asp.id, nombre: asp.nombre, count: 0, sum: 0 };
+			entry.count += docentesSinRespuesta.length;
+			agg.set(asp.id, entry);
+		}
+	}
+
 	const aspectos = [];
 	let sumaTotal = 0;
-	let totalRespuestas = detalles.length;
+	let totalRespuestas = 0;
 	for (const entry of agg.values()) {
 		const promedio = entry.count > 0 ? entry.sum / entry.count : null;
 		sumaTotal += entry.sum;
+		totalRespuestas += entry.count;
 		aspectos.push({
 			aspecto_id: entry.aspecto_id,
 			nombre: entry.nombre,
@@ -916,13 +957,30 @@ async function getAutoevaluacionMetricsForDocentes(docentesList) {
 		});
 	}
 
-	const promedioGeneral = totalRespuestas > 0 ? sumaTotal / totalRespuestas : null;
+	const promedioGeneral = totalRespuestas > 0 ? sumaTotal / totalRespuestas : 0;
 
 	return {
 		suma_total: sumaTotal,
 		total_respuestas: totalRespuestas,
 		promedio_general: promedioGeneral,
 		aspectos
+	};
+}
+
+function buildZeroAutoevaluacionFromAspectos(aspectos = []) {
+	const safeAspectos = Array.isArray(aspectos) ? aspectos : [];
+	const totalAspectos = safeAspectos.length;
+	return {
+		suma_total: 0,
+		total_respuestas: totalAspectos,
+		promedio_general: 0,
+		aspectos: safeAspectos.map((asp) => ({
+			aspecto_id: asp.aspecto_id,
+			nombre: asp.nombre,
+			total_respuestas: 1,
+			suma: 0,
+			promedio: 0
+		}))
 	};
 }
 
@@ -1163,28 +1221,26 @@ async function getDocenteAspectMetrics({ cfg_t, docente, codigo_materia, sede, p
 
 		if (codigo_materia) result.codigo_materia = String(codigo_materia);
 
-		// Add autoevaluacion if available
-		if (autoevaluacion) {
-			const autoevaluacionDocente = {
-				peso: PESO_AUTOEVALUACION,
-				suma_total: autoevaluacion.suma_total,
-				total_respuestas: autoevaluacion.total_respuestas,
-				promedio_general: autoevaluacion.promedio_general,
-				ponderado: autoevaluacion.promedio_general != null ? autoevaluacion.promedio_general * PESO_AUTOEVALUACION : null,
-				aspectos: autoevaluacion.aspectos
+		const autoevaluacionBase = autoevaluacion || buildZeroAutoevaluacionFromAspectos(aspectos);
+		const autoevaluacionDocente = {
+			peso: PESO_AUTOEVALUACION,
+			suma_total: autoevaluacionBase.suma_total,
+			total_respuestas: autoevaluacionBase.total_respuestas,
+			promedio_general: autoevaluacionBase.promedio_general,
+			ponderado: (autoevaluacionBase.promedio_general ?? 0) * PESO_AUTOEVALUACION,
+			aspectos: autoevaluacionBase.aspectos
+		};
+
+		result.autoevaluacion_docente = autoevaluacionDocente;
+
+		// Calculate final weighted score
+		const ponderadoEstudiantes = evaluacionEstudiantes.ponderado;
+		const ponderadoAutoevaluacion = autoevaluacionDocente.ponderado;
+
+		if (ponderadoEstudiantes != null && ponderadoAutoevaluacion != null) {
+			result.resultado_final = {
+				nota_final_ponderada: ponderadoEstudiantes + ponderadoAutoevaluacion
 			};
-
-			result.autoevaluacion_docente = autoevaluacionDocente;
-
-			// Calculate final weighted score
-			const ponderadoEstudiantes = evaluacionEstudiantes.ponderado;
-			const ponderadoAutoevaluacion = autoevaluacionDocente.ponderado;
-
-			if (ponderadoEstudiantes != null && ponderadoAutoevaluacion != null) {
-				result.resultado_final = {
-					nota_final_ponderada: ponderadoEstudiantes + ponderadoAutoevaluacion
-				};
-			}
 		}
 
 		return result;
@@ -1287,23 +1343,22 @@ async function getDocenteAspectMetrics({ cfg_t, docente, codigo_materia, sede, p
 		evaluacion_estudiantes: evaluacionEstudiantes
 	};
 
-	if (autoevaluacion) {
-		const autoevaluacionDocente = {
-			peso: PESO_AUTOEVALUACION,
-			suma_total: autoevaluacion.suma_total,
-			total_respuestas: autoevaluacion.total_respuestas,
-			promedio_general: autoevaluacion.promedio_general,
-			ponderado: autoevaluacion.promedio_general != null ? autoevaluacion.promedio_general * PESO_AUTOEVALUACION : null,
-			aspectos: autoevaluacion.aspectos
+	const autoevaluacionBase = autoevaluacion || buildZeroAutoevaluacionFromAspectos(aspectosFinales);
+	const autoevaluacionDocente = {
+		peso: PESO_AUTOEVALUACION,
+		suma_total: autoevaluacionBase.suma_total,
+		total_respuestas: autoevaluacionBase.total_respuestas,
+		promedio_general: autoevaluacionBase.promedio_general,
+		ponderado: (autoevaluacionBase.promedio_general ?? 0) * PESO_AUTOEVALUACION,
+		aspectos: autoevaluacionBase.aspectos
+	};
+
+	result.autoevaluacion_docente = autoevaluacionDocente;
+
+	if (evaluacionEstudiantes.ponderado != null && autoevaluacionDocente.ponderado != null) {
+		result.resultado_final = {
+			nota_final_ponderada: evaluacionEstudiantes.ponderado + autoevaluacionDocente.ponderado
 		};
-
-		result.autoevaluacion_docente = autoevaluacionDocente;
-
-		if (evaluacionEstudiantes.ponderado != null && autoevaluacionDocente.ponderado != null) {
-			result.resultado_final = {
-				nota_final_ponderada: evaluacionEstudiantes.ponderado + autoevaluacionDocente.ponderado
-			};
-		}
 	}
 
 	return result;
@@ -1751,15 +1806,28 @@ async function getDocenteCommentsWithMetrics({ cfg_t, docente, codigo_materia, s
 		select: { a_e_id: true, cmt: true }
 	});
 
-	// Cargar conclusiones/fortaleza/debilidad desde cmt_ai asociados a este docente, materia y cfg_t
-	const cmtAi = await localPrisma.cmt_ai.findMany({
-		where: {
-			cfg_t_id: cfgId,
-			docente: String(docente),
-			codigo_materia: codigo_materia ? String(codigo_materia) : undefined
-		},
-		select: { aspecto_id: true, conclusion: true, conclusion_gen: true, fortaleza: true, debilidad: true }
-	});
+	// Cargar conclusiones/fortaleza/debilidad desde cmt_ai.
+	// Compatibilidad: algunos clientes Prisma no exponen docente/codigo_materia en cmt_ai.
+	let cmtAi = [];
+	try {
+		cmtAi = await localPrisma.cmt_ai.findMany({
+			where: {
+				cfg_t_id: cfgId,
+				docente: String(docente),
+				codigo_materia: codigo_materia ? String(codigo_materia) : undefined
+			},
+			select: { aspecto_id: true, conclusion: true, conclusion_gen: true, fortaleza: true, debilidad: true }
+		});
+	} catch (err) {
+		if (String(err?.message || '').includes('Unknown argument `docente`')) {
+			cmtAi = await localPrisma.cmt_ai.findMany({
+				where: { cfg_t_id: cfgId },
+				select: { aspecto_id: true, conclusion: true, conclusion_gen: true, fortaleza: true, debilidad: true }
+			});
+		} else {
+			throw err;
+		}
+	}
 	const conclusionByAspect = new Map();
 	for (const c of cmtAi) {
 		if (c.aspecto_id) {

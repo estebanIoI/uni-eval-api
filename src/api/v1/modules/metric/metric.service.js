@@ -119,6 +119,79 @@ function parseJsonSafe(text, fallback = {}) {
     return fallback;
 }
 
+function hasTextComments(data) {
+    const general = Array.isArray(data?.cmt_gen) ? data.cmt_gen : [];
+    const hasGeneral = general.some((c) => String(c || '').trim().length > 0);
+    if (hasGeneral) return true;
+
+    const aspectos = Array.isArray(data?.aspectos) ? data.aspectos : [];
+    return aspectos.some((asp) => {
+        const comments = Array.isArray(asp?.cmt) ? asp.cmt : [];
+        return comments.some((c) => String(c || '').trim().length > 0);
+    });
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+    if (!Array.isArray(items) || !items.length) return [];
+    const limit = Math.max(1, Number(concurrency) || 1);
+    const results = new Array(items.length);
+    let current = 0;
+
+    async function worker() {
+        while (true) {
+            const idx = current;
+            current += 1;
+            if (idx >= items.length) return;
+            results[idx] = await mapper(items[idx], idx);
+        }
+    }
+
+    const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
+}
+
+async function deleteCmtAiCompat(localPrisma, { cfgId, docente, codigo_materia }) {
+    try {
+        await localPrisma.cmt_ai.deleteMany({
+            where: {
+                cfg_t_id: cfgId,
+                docente: String(docente),
+                codigo_materia: String(codigo_materia)
+            }
+        });
+    } catch (err) {
+        if (String(err?.message || '').includes('Unknown argument `docente`')) {
+            await localPrisma.cmt_ai.deleteMany({
+                where: { cfg_t_id: cfgId }
+            });
+            return;
+        }
+        throw err;
+    }
+}
+
+async function createCmtAiCompat(localPrisma, records) {
+    if (!records.length) return;
+    try {
+        await localPrisma.cmt_ai.createMany({ data: records });
+    } catch (err) {
+        if (String(err?.message || '').includes('Unknown argument `docente`')) {
+            const sanitized = records.map((r) => ({
+                cfg_t_id: r.cfg_t_id,
+                aspecto_id: r.aspecto_id,
+                conclusion: r.conclusion,
+                conclusion_gen: r.conclusion_gen,
+                fortaleza: r.fortaleza,
+                debilidad: r.debilidad
+            }));
+            await localPrisma.cmt_ai.createMany({ data: sanitized });
+            return;
+        }
+        throw err;
+    }
+}
+
 async function docenteCommentsAnalysis(query) {
 	const { localPrisma } = require('../../../../prisma/clients');
 	const cfgId = Number(query.cfg_t);
@@ -147,35 +220,39 @@ async function docenteCommentsAnalysis(query) {
 		};
 	}
 	
-	const resultados = [];
-	
-	// 2. Analizar cada materia por separado
-	for (const codigo_materia of materiasAAnalizar) {
-		// Obtener datos específicos de esta materia
-		const dataMateria = await repo.getDocenteCommentsWithMetrics({
-			...query,
-			codigo_materia
-		});
-		
-		if (!dataMateria.total_respuestas) {
-			continue; // Saltar si no hay respuestas para esta materia
-		}
-		
-		// Analizar comentarios con IA
-		const analisisIA = await analyzeFromAggregated(dataMateria, query.docente);
-		
-        // 3. Guardar análisis en la tabla cmt_ai por aspecto usando cfg_t_id, docente y materia
-        if (analisisIA.analisis) {
-            // Limpiar registros previos para este docente, materia y cfg_t
-            await localPrisma.cmt_ai.deleteMany({
-                where: {
-                    cfg_t_id: cfgId,
-                    docente: String(query.docente),
-                    codigo_materia: String(codigo_materia)
-                }
-            });
+    // 2. Analizar materias con concurrencia controlada
+    const resultadosRaw = await mapWithConcurrency(materiasAAnalizar, 2, async (codigo_materia) => {
+        const dataMateria = await repo.getDocenteCommentsWithMetrics({
+            ...query,
+            codigo_materia
+        });
 
-            // Crear registros por aspecto
+        if (!dataMateria.total_respuestas) {
+            return {
+                codigo_materia,
+                estado: 'sin_respuestas'
+            };
+        }
+
+        const hasComments = hasTextComments(dataMateria);
+
+        // 3. Limpiar registros previos para este docente, materia y cfg_t
+        await deleteCmtAiCompat(localPrisma, {
+            cfgId,
+            docente: query.docente,
+            codigo_materia
+        });
+
+        if (!hasComments) {
+            return {
+                codigo_materia,
+                estado: 'sin_comentarios'
+            };
+        }
+
+        const analisisIA = await analyzeFromAggregated(dataMateria, query.docente);
+
+        if (analisisIA.analisis) {
             const cmtAiRecords = [];
             for (const aspecto of analisisIA.analisis.aspectos || []) {
                 cmtAiRecords.push({
@@ -190,16 +267,17 @@ async function docenteCommentsAnalysis(query) {
                 });
             }
 
-            if (cmtAiRecords.length) {
-                await localPrisma.cmt_ai.createMany({ data: cmtAiRecords });
-            }
+            await createCmtAiCompat(localPrisma, cmtAiRecords);
         }
-		
-		resultados.push({
-			codigo_materia,
-			analisis: analisisIA
-		});
-	}
+
+        return {
+            codigo_materia,
+            estado: 'analizado',
+            analisis: analisisIA
+        };
+    });
+
+    const resultados = resultadosRaw.filter(Boolean);
 	
 	// 4. Retornar el análisis generado
 	return {
@@ -214,6 +292,7 @@ async function generateDocxReport({
     cfg_t,
     docente,
     codigo_materia,
+    ai_mode,
     sede,
     periodo,
     programa,
@@ -226,8 +305,21 @@ async function generateDocxReport({
     const cfgId = Number(cfg_t);
 
     // ================================
-    // 1. Obtener datos usando docenteComments (que usa getDocenteCommentsWithMetrics)
+    // 1. Obtener datos para Word
+    // - docenteAspectMetrics: fuente oficial de métricas por aspecto (lo pintado en Word)
+    // - docenteComments: comentarios + conclusiones IA/cache
     // ================================
+    const aspectData = await docenteAspectMetrics({
+        cfg_t,
+        docente,
+        codigo_materia,
+        sede,
+        periodo,
+        programa,
+        semestre,
+        grupo
+    });
+
     const metricsData = await docenteComments({
         cfg_t,
         docente,
@@ -241,13 +333,38 @@ async function generateDocxReport({
 
     // Métricas por materia del docente
     const materiasStats = await repo.getDocenteMateriaMetrics({ cfg_t, docente, sede, periodo, programa, semestre, grupo });
-    const materias = (materiasStats?.materias || []).map(m => ({
-        codigo_materia: String(m.codigo_materia || ''),
-        nombre_materia: m.nombre_materia || String(m.codigo_materia || ''),
-        promedio_general: m.promedio_general != null ? Number(m.promedio_general.toFixed(2)) : null,
-    }));
+    const materias = (materiasStats?.materias || []).map(m => {
+        const hasStudentResponses = Number(m.total_realizadas || 0) > 0;
+        const weightedOrStudentAvg = m.nota_final_ponderada ?? m.promedio_general;
+        const promedioMateria = hasStudentResponses && weightedOrStudentAvg != null
+            ? Number(Number(weightedOrStudentAvg).toFixed(2))
+            : 0.0;
 
-    if (!metricsData.aspectos || metricsData.aspectos.length === 0) {
+        return {
+            codigo_materia: String(m.codigo_materia || ''),
+            nombre_materia: m.nombre_materia || String(m.codigo_materia || ''),
+            promedio_general: promedioMateria,
+            total_realizadas: Number(m.total_realizadas || 0)
+        };
+    });
+
+    const evaluacionEstudiantes = aspectData?.evaluacion_estudiantes || {};
+    const autoevaluacionDocente = aspectData?.autoevaluacion_docente || {};
+    const pesoEvaluacion = typeof evaluacionEstudiantes?.peso === 'number' ? evaluacionEstudiantes.peso : 0.8;
+    const pesoAutoevaluacion = typeof autoevaluacionDocente?.peso === 'number' ? autoevaluacionDocente.peso : 0.2;
+
+    const evalAspectos = Array.isArray(evaluacionEstudiantes?.aspectos)
+        ? evaluacionEstudiantes.aspectos
+        : [];
+    const autoAspectos = Array.isArray(autoevaluacionDocente?.aspectos)
+        ? autoevaluacionDocente.aspectos
+        : [];
+
+    const aspectSource = evalAspectos.length
+        ? evalAspectos
+        : (Array.isArray(metricsData?.aspectos) ? metricsData.aspectos : []);
+
+    if (!aspectSource.length) {
         throw new Error('No hay evaluaciones para este docente/materia');
     }
     
@@ -263,33 +380,79 @@ async function generateDocxReport({
     // ================================
     // 2. Preparar aspectos con formato para el reporte
     // ================================
-    const aspectos = metricsData.aspectos.map(asp => ({
-        aspecto_id: asp.aspecto_id,
-        aspecto_nombre: asp.nombre || `Aspecto ${asp.aspecto_id}`,
-        suma: asp.suma || 0,
-        promedio: asp.promedio != null ? Number(asp.promedio.toFixed(2)) : 0,
-        desviacion: asp.desviacion != null ? Number(asp.desviacion.toFixed(2)) : 0,
-        total_respuestas: asp.total_respuestas || 0,
-        conclusion: asp.conclusion || ''
-    }));
+    const aiConclusionByAspectId = new Map(
+        (Array.isArray(metricsData?.aspectos) ? metricsData.aspectos : [])
+            .filter((asp) => asp?.aspecto_id != null)
+            .map((asp) => [asp.aspecto_id, asp.conclusion || ''])
+    );
+
+    const autoAspectById = new Map(
+        autoAspectos
+            .filter((asp) => asp?.aspecto_id != null)
+            .map((asp) => [asp.aspecto_id, asp])
+    );
+
+    const allAspectIds = Array.from(new Set([
+        ...aspectSource.map((asp) => asp?.aspecto_id).filter((id) => id != null),
+        ...autoAspectos.map((asp) => asp?.aspecto_id).filter((id) => id != null)
+    ]));
+
+    const aspectById = new Map(
+        aspectSource
+            .filter((asp) => asp?.aspecto_id != null)
+            .map((asp) => [asp.aspecto_id, asp])
+    );
+
+    const aspectos = allAspectIds.map((aspectoId) => {
+        const evalAsp = aspectById.get(aspectoId) || {};
+        const autoAsp = autoAspectById.get(aspectoId) || {};
+
+        const promedioEval = typeof evalAsp.promedio === 'number' ? evalAsp.promedio : null;
+        const promedioAuto = typeof autoAsp.promedio === 'number' ? autoAsp.promedio : null;
+        const promedioPonderado = ((promedioEval ?? 0) * pesoEvaluacion) + ((promedioAuto ?? 0) * pesoAutoevaluacion);
+        const promedioEvalNum = Number((promedioEval ?? 0).toFixed(2));
+        const promedioAutoNum = Number((promedioAuto ?? 0).toFixed(2));
+        const promedioFinalNum = Number(promedioPonderado.toFixed(2));
+
+        return {
+            aspecto_id: aspectoId,
+            aspecto_nombre: evalAsp.nombre || autoAsp.nombre || `Aspecto ${aspectoId}`,
+            suma: evalAsp.suma || 0,
+            promedio: promedioFinalNum,
+            desviacion: evalAsp.desviacion != null ? Number(evalAsp.desviacion.toFixed(2)) : 0,
+            total_respuestas: evalAsp.total_respuestas || 0,
+            promedio_estudiantes: promedioEvalNum,
+            promedio_autoevaluacion: promedioAutoNum,
+            peso_evaluacion: Number(pesoEvaluacion.toFixed(2)),
+            peso_autoevaluacion: Number(pesoAutoevaluacion.toFixed(2)),
+            formula_aspecto: `${promedioEvalNum.toFixed(2)} x ${Number(pesoEvaluacion.toFixed(2)).toFixed(2)} + ${promedioAutoNum.toFixed(2)} x ${Number(pesoAutoevaluacion.toFixed(2)).toFixed(2)} = ${promedioFinalNum.toFixed(2)}`,
+            conclusion: aiConclusionByAspectId.get(aspectoId) || ''
+        };
+    });
 
     // ================================
     // 3. Usar métricas calculadas del repository
     // ================================
-    const promedioGeneral = metricsData.promedio_general != null 
-        ? Number(metricsData.promedio_general.toFixed(2)) 
+    const promedioGeneralSrc = aspectData?.resultado_final?.nota_final_ponderada
+        ?? aspectData?.evaluacion_estudiantes?.promedio_general;
+    const desviacionGeneralSrc = aspectData?.evaluacion_estudiantes?.desviacion;
+
+    const promedioGeneral = promedioGeneralSrc != null 
+        ? Number(promedioGeneralSrc.toFixed(2)) 
         : 0;
-    const desviacionGeneral = metricsData.desviacion_general != null 
-        ? Number(metricsData.desviacion_general.toFixed(2)) 
+    const desviacionGeneral = desviacionGeneralSrc != null 
+        ? Number(desviacionGeneralSrc.toFixed(2)) 
         : 0;
     const porcentajeCumplimiento = metricsData.porcentaje_cumplimiento || 0;
 
     // ================================
     // 4. Obtener conclusiones, fortalezas y debilidades
     // ================================
-    const conclusionGen = metricsData.conclusion_gen || '';
-    const fortalezas = Array.isArray(metricsData.fortalezas) ? metricsData.fortalezas : [];
-    const debilidades = Array.isArray(metricsData.debilidades) ? metricsData.debilidades : [];
+    const mode = String(ai_mode || 'cached').toLowerCase();
+    const useAiConclusions = mode !== 'none';
+    const conclusionGen = useAiConclusions ? (metricsData.conclusion_gen || '') : '';
+    const fortalezas = useAiConclusions && Array.isArray(metricsData.fortalezas) ? metricsData.fortalezas : [];
+    const debilidades = useAiConclusions && Array.isArray(metricsData.debilidades) ? metricsData.debilidades : [];
 
     // ================================
     // 5. Cargar la plantilla DOCX
@@ -428,6 +591,12 @@ async function generateDocxReport({
         promedio_general: promedioGeneral,
         desviacion_general: desviacionGeneral,
         porcentaje_cumplimiento: Number(porcentajeCumplimiento.toFixed(2)),
+        promedio_estudiantes_general: evaluacionEstudiantes?.promedio_general ?? 0,
+        promedio_autoevaluacion_general: autoevaluacionDocente?.promedio_general ?? 0,
+        nota_final_ponderada: aspectData?.resultado_final?.nota_final_ponderada ?? promedioGeneral,
+        peso_evaluacion_estudiantes: pesoEvaluacion,
+        peso_autoevaluacion_docente: pesoAutoevaluacion,
+        formula_nota_final: `${Number(evaluacionEstudiantes?.promedio_general ?? 0).toFixed(2)} x ${Number(pesoEvaluacion).toFixed(2)} + ${Number(autoevaluacionDocente?.promedio_general ?? 0).toFixed(2)} x ${Number(pesoAutoevaluacion).toFixed(2)} = ${Number(aspectData?.resultado_final?.nota_final_ponderada ?? promedioGeneral).toFixed(2)}`,
 
         total_evaluaciones: metricsData.total_evaluaciones || 0,
         total_realizadas: metricsData.total_realizadas || 0,
@@ -436,7 +605,7 @@ async function generateDocxReport({
         // Aspectos con conclusión corregida
         aspectos: aspectos.map(asp => ({
             ...asp,
-            ai_conclusion: asp.conclusion || ''
+            ai_conclusion: useAiConclusions ? (asp.conclusion || '') : ''
         })),
 
         // Conclusiones (nombres ajustados a plantilla)

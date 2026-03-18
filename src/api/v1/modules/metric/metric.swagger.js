@@ -25,6 +25,14 @@
  *           type: string
  *         description: Si se proporciona, filtra el reporte a una materia específica
  *       - in: query
+ *         name: ai_mode
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [none, cached]
+ *           default: cached
+ *         description: Modo de IA para el reporte. `none` genera el informe sin conclusiones IA, `cached` usa análisis previamente guardado en cmt_ai.
+ *       - in: query
  *         name: sede
  *         required: false
  *         schema:

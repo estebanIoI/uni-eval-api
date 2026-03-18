@@ -1,9 +1,11 @@
 const { Ollama } = require('ollama');
 
-const client = new Ollama({ host: process.env.OLLAMA_HOST });
-const model = process.env.LLM_MODEL;
+const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
+const model = process.env.LLM_MODEL || 'llama3.1:8b-instruct-q4_K_M';
+const client = new Ollama({ host });
 
 async function summarizeChunk(text, systemPrompt, userPrompt) {
+  if (!model) throw new Error('LLM_MODEL no está configurado');
   const res = await client.chat({
     model,
     messages: [

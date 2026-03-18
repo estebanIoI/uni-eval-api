@@ -20,6 +20,26 @@ function chunk(arr, size) {
   return out;
 }
 
+async function mapWithConcurrency(items, concurrency, mapper) {
+  if (!Array.isArray(items) || !items.length) return [];
+  const limit = Math.max(1, Number(concurrency) || 1);
+  const results = new Array(items.length);
+  let current = 0;
+
+  async function worker() {
+    while (true) {
+      const idx = current;
+      current += 1;
+      if (idx >= items.length) return;
+      results[idx] = await mapper(items[idx], idx);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 function parseJsonSafe(text, fallback = {}) {
   if (!text || typeof text !== 'string') return fallback;
   try { return JSON.parse(text); } catch {}
@@ -31,7 +51,7 @@ function parseJsonSafe(text, fallback = {}) {
 }
 
 async function summarizeAspect(aspectName, comments) {
-  const cleaned = comments.map(cleanText).filter(Boolean);
+  const cleaned = (Array.isArray(comments) ? comments : []).map(cleanText).filter(Boolean);
   if (!cleaned.length) {
     return { aspect: aspectName, summary: '', sentiment: 'neutral', themes: [], quotes: [] };
   }
@@ -47,11 +67,10 @@ async function summarizeAspect(aspectName, comments) {
     '{ "summary": string, "sentiment": "positivo"|"neutral"|"negativo", "themes": string[], "quotes": string[] }',
     'Límites: summary<=280 chars; cada theme<=50 chars; máximo 6 themes; máximo 3 quotes.'
   ].join(' ');
-  const partials = [];
-  for (const c of chunks) {
+  const partials = await mapWithConcurrency(chunks, 3, async (c) => {
     const out = await summarizeChunk(c, system, user);
-    partials.push(parseJsonSafe(out, { summary: '', sentiment: 'neutral', themes: [], quotes: [] }));
-  }
+    return parseJsonSafe(out, { summary: '', sentiment: 'neutral', themes: [], quotes: [] });
+  });
   const sentimentScore = { positivo: 1, neutral: 0, negativo: -1 };
   const avg = partials.reduce((a, p) => a + (sentimentScore[p.sentiment] ?? 0), 0) / (partials.length || 1);
   const sentiment = avg > 0.25 ? 'positivo' : avg < -0.25 ? 'negativo' : 'neutral';
@@ -119,7 +138,10 @@ async function analyzeComments(filters) {
 
 // Analyze from already aggregated repo response (metrics + comments)
 async function analyzeFromAggregated(data, docente) {
-  const generalText = cleanText((data.cmt_gen || []).join('\n- '));
+  const generalComments = Array.isArray(data?.cmt_gen)
+    ? data.cmt_gen
+    : (data?.cmt_gen ? [data.cmt_gen] : []);
+  const generalText = cleanText(generalComments.join('\n- '));
   let generalSummary = { summary: '', sentiment: 'neutral' };
   if (generalText) {
     const system = 'Responde SOLO en JSON válido sin texto adicional.';
@@ -135,15 +157,14 @@ async function analyzeFromAggregated(data, docente) {
     generalSummary = parsed;
   }
 
-  const aspectSummaries = [];
-  for (const a of (data.aspectos || [])) {
+  const aspectos = Array.isArray(data?.aspectos) ? data.aspectos : [];
+  const aspectSummaries = await mapWithConcurrency(aspectos, 3, async (a) => {
     const aspectName = a.nombre || String(a.aspecto_id);
-    const comments = (a.cmt || []).map(cleanText).filter(Boolean);
+    const comments = (Array.isArray(a?.cmt) ? a.cmt : []).map(cleanText).filter(Boolean);
     const summary = await summarizeAspect(aspectName, comments);
-    // Preserve ca_map.id so downstream can write aspecto_id
     summary.aspecto_id = a.aspecto_id;
-    aspectSummaries.push(summary);
-  }
+    return summary;
+  });
   const global = await summarizeGlobal(aspectSummaries, generalSummary);
 
   return {
