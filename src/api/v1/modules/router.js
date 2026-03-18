@@ -56,4 +56,7 @@ router.use('/metric', require('./metric/metric.router'));
 // Filtros
 router.use('/filter', require('./filter/filter.router'));
 
+// AI Config
+router.use('/ai/config', require('./ai/ai-config.router'));
+
 module.exports = { router };

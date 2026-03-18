@@ -8,14 +8,14 @@ class UserRepository {
   findMateriasByEstudiante(ID_ESTUDIANTE) {
     return this.model.findMany({
       where: { ID_ESTUDIANTE },
-      orderBy: { ID_PERIODO: 'asc' }
+      orderBy: { PERIODO: 'asc' }
     });
   }
 
   findMateriasByDocente(ID_DOCENTE) {
     return this.model.findMany({
       where: { ID_DOCENTE },
-      orderBy: { ID_PERIODO: 'asc' }
+      orderBy: { PERIODO: 'asc' }
     });
   }
 }
