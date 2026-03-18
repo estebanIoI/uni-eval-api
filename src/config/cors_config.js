@@ -11,7 +11,7 @@ const corsOptions = {
       callback(null, true);
     } else {
       console.log(`${messages.CORS_BLOCKED} ${origin}`);
-      callback(null, true);
+      callback(new Error(`Origen no permitido por CORS: ${origin}`));
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],

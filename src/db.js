@@ -10,12 +10,16 @@ const PRISMA_CLIENTS = [
 async function initializeDatabase() {
   console.log(messages.DB_INIT_START);
 
-  for (const { client, ok, err } of PRISMA_CLIENTS) {
+  for (const { name, client, ok, err } of PRISMA_CLIENTS) {
     try {
       await client.$queryRaw`SELECT 1 as health`;
       console.log(ok);
     } catch (error) {
       console.error(err, error.message);
+      // La DB local es crítica: sin ella la app no puede funcionar
+      if (name === 'local') {
+        throw new Error(`Base de datos local no disponible: ${error.message}`);
+      }
     }
   }
 
