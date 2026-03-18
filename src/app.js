@@ -12,7 +12,7 @@ const messages = require('@constants/app-messages');
 
 const app = express();
 
-// Middlewares
+// Middlewares para mi
 app.use(cors(corsOptions));
 app.use(helmet());
 app.use(express.json());
