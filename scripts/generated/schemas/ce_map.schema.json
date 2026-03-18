@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "ce_map",
+  "properties": {
+    "categoria_id": {
+      "type": "integer"
+    },
+    "escala_id": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "categoria_id",
+    "escala_id"
+  ],
+  "additionalProperties": false
+}

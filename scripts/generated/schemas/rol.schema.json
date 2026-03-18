@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "rol",
+  "properties": {
+    "nombre": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "nombre"
+  ],
+  "additionalProperties": false
+}

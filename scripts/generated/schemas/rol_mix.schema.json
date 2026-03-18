@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "rol_mix",
+  "properties": {
+    "rol_origen_id": {
+      "type": "integer"
+    },
+    "nombre": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "nombre"
+  ],
+  "additionalProperties": false
+}

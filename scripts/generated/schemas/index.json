@@ -1,0 +1,499 @@
+{
+  "a_e": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "a_e",
+    "properties": {
+      "aspecto_id": {
+        "type": "integer"
+      },
+      "escala_id": {
+        "type": "integer"
+      },
+      "es_cmt": {
+        "type": "boolean"
+      },
+      "es_cmt_oblig": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "aspecto_id"
+    ],
+    "additionalProperties": false
+  },
+  "aspecto": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "aspecto",
+    "properties": {
+      "nombre": {
+        "type": "string"
+      },
+      "descripcion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "nombre"
+    ],
+    "additionalProperties": false
+  },
+  "ca_map": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "ca_map",
+    "properties": {
+      "categoria_id": {
+        "type": "integer"
+      },
+      "aspecto_id": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "categoria_id",
+      "aspecto_id"
+    ],
+    "additionalProperties": false
+  },
+  "cat_a": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "cat_a",
+    "properties": {
+      "nombre": {
+        "type": "string"
+      },
+      "descripcion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "nombre"
+    ],
+    "additionalProperties": false
+  },
+  "cat_e": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "cat_e",
+    "properties": {
+      "nombre": {
+        "type": "string"
+      },
+      "descripcion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "nombre"
+    ],
+    "additionalProperties": false
+  },
+  "cat_t": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "cat_t",
+    "properties": {
+      "nombre": {
+        "type": "string"
+      },
+      "descripcion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "nombre"
+    ],
+    "additionalProperties": false
+  },
+  "ce_map": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "ce_map",
+    "properties": {
+      "categoria_id": {
+        "type": "integer"
+      },
+      "escala_id": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "categoria_id",
+      "escala_id"
+    ],
+    "additionalProperties": false
+  },
+  "cfg_a": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "cfg_a",
+    "properties": {
+      "cfg_t_id": {
+        "type": "integer"
+      },
+      "aspecto_id": {
+        "type": "integer"
+      },
+      "orden": {
+        "type": "number"
+      },
+      "es_activo": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "cfg_t_id",
+      "aspecto_id",
+      "orden"
+    ],
+    "additionalProperties": false
+  },
+  "cfg_e": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "cfg_e",
+    "properties": {
+      "cfg_t_id": {
+        "type": "integer"
+      },
+      "escala_id": {
+        "type": "integer"
+      },
+      "puntaje": {
+        "type": "number"
+      },
+      "orden": {
+        "type": "number"
+      },
+      "es_activo": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "cfg_t_id",
+      "escala_id",
+      "puntaje",
+      "orden"
+    ],
+    "additionalProperties": false
+  },
+  "cfg_t": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "cfg_t",
+    "properties": {
+      "tipo_id": {
+        "type": "integer"
+      },
+      "tipo_form_id": {
+        "type": "integer"
+      },
+      "fecha_inicio": {
+        "type": "string",
+        "format": "date"
+      },
+      "fecha_fin": {
+        "type": "string",
+        "format": "date"
+      },
+      "es_cmt_gen": {
+        "type": "boolean"
+      },
+      "es_cmt_gen_oblig": {
+        "type": "boolean"
+      },
+      "es_activo": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "tipo_id",
+      "tipo_form_id",
+      "fecha_inicio",
+      "fecha_fin"
+    ],
+    "additionalProperties": false
+  },
+  "cfg_t_rol": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "cfg_t_rol",
+    "properties": {
+      "cfg_t_id": {
+        "type": "integer"
+      },
+      "rol_mix_id": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "cfg_t_id",
+      "rol_mix_id"
+    ],
+    "additionalProperties": false
+  },
+  "cmt_ai": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "cmt_ai",
+    "properties": {
+      "cfg_t_id": {
+        "type": "integer"
+      },
+      "aspecto_id": {
+        "type": "integer"
+      },
+      "conclusion": {
+        "type": "string"
+      },
+      "conclusion_gen": {
+        "type": "string"
+      },
+      "fortaleza": {
+        "type": "object"
+      },
+      "debilidad": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "cfg_t_id",
+      "aspecto_id"
+    ],
+    "additionalProperties": false
+  },
+  "ct_map": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "ct_map",
+    "properties": {
+      "categoria_id": {
+        "type": "integer"
+      },
+      "tipo_id": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "categoria_id",
+      "tipo_id"
+    ],
+    "additionalProperties": false
+  },
+  "escala": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "escala",
+    "properties": {
+      "sigla": {
+        "type": "string"
+      },
+      "nombre": {
+        "type": "string"
+      },
+      "descripcion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "sigla",
+      "nombre"
+    ],
+    "additionalProperties": false
+  },
+  "eval": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "eval",
+    "properties": {
+      "id_configuracion": {
+        "type": "integer"
+      },
+      "estudiante": {
+        "type": "string"
+      },
+      "docente": {
+        "type": "string"
+      },
+      "codigo_materia": {
+        "type": "string"
+      },
+      "cmt_gen": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id_configuracion"
+    ],
+    "additionalProperties": false
+  },
+  "eval_det": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "eval_det",
+    "properties": {
+      "eval_id": {
+        "type": "integer"
+      },
+      "a_e_id": {
+        "type": "integer"
+      },
+      "cmt": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "eval_id",
+      "a_e_id"
+    ],
+    "additionalProperties": false
+  },
+  "prog": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "prog",
+    "properties": {
+      "nombre": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "nombre"
+    ],
+    "additionalProperties": false
+  },
+  "rfh_tkn": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "rfh_tkn",
+    "properties": {
+      "jti": {
+        "type": "string"
+      },
+      "user_id": {
+        "type": "integer"
+      },
+      "token": {
+        "type": "string"
+      },
+      "fecha_expiracion": {
+        "type": "string",
+        "format": "date"
+      },
+      "es_revocado": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "jti",
+      "user_id",
+      "token",
+      "fecha_expiracion"
+    ],
+    "additionalProperties": false
+  },
+  "rol": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "rol",
+    "properties": {
+      "nombre": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "nombre"
+    ],
+    "additionalProperties": false
+  },
+  "rol_mix": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "rol_mix",
+    "properties": {
+      "rol_origen_id": {
+        "type": "integer"
+      },
+      "nombre": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "nombre"
+    ],
+    "additionalProperties": false
+  },
+  "tipo": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "tipo",
+    "properties": {
+      "nombre": {
+        "type": "string"
+      },
+      "descripcion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "nombre"
+    ],
+    "additionalProperties": false
+  },
+  "user_prog": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "user_prog",
+    "properties": {
+      "user_rol_id": {
+        "type": "integer"
+      },
+      "prog_id": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "user_rol_id",
+      "prog_id"
+    ],
+    "additionalProperties": false
+  },
+  "user_rol": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "user_rol",
+    "properties": {
+      "user_id": {
+        "type": "integer"
+      },
+      "rol_id": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "user_id",
+      "rol_id"
+    ],
+    "additionalProperties": false
+  },
+  "tipo_form": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "tipo_form",
+    "properties": {
+      "nombre": {
+        "type": "string"
+      },
+      "descripcion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "nombre"
+    ],
+    "additionalProperties": false
+  }
+}

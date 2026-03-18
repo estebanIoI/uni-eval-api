@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "escala",
+  "properties": {
+    "sigla": {
+      "type": "string"
+    },
+    "nombre": {
+      "type": "string"
+    },
+    "descripcion": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sigla",
+    "nombre"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "cfg_a",
+  "properties": {
+    "cfg_t_id": {
+      "type": "integer"
+    },
+    "aspecto_id": {
+      "type": "integer"
+    },
+    "orden": {
+      "type": "number"
+    },
+    "es_activo": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "cfg_t_id",
+    "aspecto_id",
+    "orden"
+  ],
+  "additionalProperties": false
+}

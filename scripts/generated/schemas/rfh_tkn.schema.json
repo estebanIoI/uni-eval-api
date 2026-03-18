@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "rfh_tkn",
+  "properties": {
+    "jti": {
+      "type": "string"
+    },
+    "user_id": {
+      "type": "integer"
+    },
+    "token": {
+      "type": "string"
+    },
+    "fecha_expiracion": {
+      "type": "string",
+      "format": "date"
+    },
+    "es_revocado": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "jti",
+    "user_id",
+    "token",
+    "fecha_expiracion"
+  ],
+  "additionalProperties": false
+}

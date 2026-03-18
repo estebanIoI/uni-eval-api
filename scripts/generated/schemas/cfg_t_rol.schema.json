@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "cfg_t_rol",
+  "properties": {
+    "cfg_t_id": {
+      "type": "integer"
+    },
+    "rol_mix_id": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "cfg_t_id",
+    "rol_mix_id"
+  ],
+  "additionalProperties": false
+}

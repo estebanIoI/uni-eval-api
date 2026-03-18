@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "cmt_ai",
+  "properties": {
+    "cfg_t_id": {
+      "type": "integer"
+    },
+    "aspecto_id": {
+      "type": "integer"
+    },
+    "conclusion": {
+      "type": "string"
+    },
+    "conclusion_gen": {
+      "type": "string"
+    },
+    "fortaleza": {
+      "type": "object"
+    },
+    "debilidad": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "cfg_t_id",
+    "aspecto_id"
+  ],
+  "additionalProperties": false
+}
