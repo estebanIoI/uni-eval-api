@@ -12,6 +12,9 @@ const messages = require('@constants/app-messages');
 
 const app = express();
 
+// Trust Nginx reverse proxy (Dokploy)
+app.set('trust proxy', 1);
+
 // Middlewares para mi
 app.use(cors(corsOptions));
 app.use(helmet());

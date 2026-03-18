@@ -7,3 +7,23 @@ datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL_USER")
 }
+
+/// Read-only view — all fields nullable except IDs used as composite key
+model vista_academica_insitus {
+  ID_ESTUDIANTE   String
+  ID_DOCENTE      String
+  COD_ASIGNATURA  String
+  GRUPO           String
+  PERIODO         String?
+  SEMESTRE        String?
+  NOM_PROGRAMA    String?
+  NOMBRE_SEDE     String?
+  DOCENTE         String?
+  ASIGNATURA      String?
+  PRIMER_APELLIDO  String?
+  SEGUNDO_APELLIDO String?
+  PRIMER_NOMBRE    String?
+  SEGUNDO_NOMBRE   String?
+
+  @@id([ID_ESTUDIANTE, ID_DOCENTE, COD_ASIGNATURA, GRUPO])
+}

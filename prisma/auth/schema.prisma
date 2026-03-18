@@ -7,3 +7,15 @@ datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL_AUTH")
 }
+
+model datalogin {
+  user_id       Int     @id
+  user_username String
+  user_password String
+  user_name     String?
+  user_email    String?
+  user_idrole   Int?
+  user_statusid Int?
+  role_name     String?
+  role          String?
+}
